@@ -19,7 +19,7 @@ import { URLify } from "./urlify";
             var field = $(this);
 
             field.data('_changed', false);
-            field.change(function() {
+            field.on('change', function() {
                 field.data('_changed', true);
             });
 

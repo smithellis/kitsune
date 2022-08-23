@@ -97,7 +97,7 @@ function handleLocale(countryName) {
 
       trackEvent('Geo IP Targeting', 'show banner');
     })
-    .error(function(err) {
+    .on('error', function(err) {
       console.error('GeoIP suggestion error', err);
     });
 

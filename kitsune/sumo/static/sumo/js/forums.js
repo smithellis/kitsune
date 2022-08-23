@@ -39,7 +39,7 @@ import Marky from "sumo/js/markup";
         form.find('a').toggleClass('yes').toggleClass('no');
         form.find('a.no').attr('title', gettext('You are not watching this thread'));
         form.find('a.yes').attr('title', gettext('You are watching this thread'));
-      }).error(function() {
+      }).on('error', function() {
         // error growl
       });
       return false;

@@ -1199,6 +1199,7 @@ CSP_FONT_SRC = (
 
 CSP_STYLE_SRC = (
     "'self'",
+    "'unsafe-inline'",
     "https://*.itsre-sumo.mozilla.net",
 )
 
@@ -1207,6 +1208,7 @@ CSP_FORM_ACTION = ("'self'",)
 CSP_MANIFEST_SRC = (
     "https://support.allizom.org",
     "https://support.mozilla.org",
+    "'self'",
 )
 
 CSP_CONNECT_SRC = (

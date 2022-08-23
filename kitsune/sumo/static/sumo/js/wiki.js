@@ -453,7 +453,7 @@ import ShowFor from "sumo/js/showfor";
       var form = $(this);
       $.post(form.attr('action'), form.serialize(), function() {
         form.find('.watchtoggle').toggleClass('on');
-      }).error(function() {
+      }).on('error', function() {
         // error growl
       });
       return false;
