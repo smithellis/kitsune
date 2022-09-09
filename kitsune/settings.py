@@ -5,7 +5,6 @@ import logging
 import os
 import platform
 import re
-from datetime import date
 
 import dj_database_url
 import django_cache_url
@@ -426,6 +425,7 @@ _CONTEXT_PROCESSORS = [
 
 TEMPLATES = [
     {
+        "NAME": "jinja2",
         "BACKEND": "django_jinja.backend.Jinja2",
         "DIRS": [
             path("dist"),
@@ -442,8 +442,6 @@ TEMPLATES = [
             "undefined": "jinja2.Undefined",
             "extensions": [
                 "waffle.jinja.WaffleExtension",
-                "jinja2.ext.autoescape",
-                "jinja2.ext.with_",
                 "jinja2.ext.do",
                 "django_jinja.builtins.extensions.CsrfExtension",
                 "django_jinja.builtins.extensions.StaticFilesExtension",
