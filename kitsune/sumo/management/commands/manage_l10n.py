@@ -8,7 +8,7 @@ class Command(BaseCommand):
     Extract creates two .pot files - django.pot and djangojs.pot - that contain
     messages to merge into the existing l10n files.
     Update will merge the .pot files into the existing l10n files, which exist
-    in kitsune/locale (if you have the repo downloaded).
+    in locale (if you have the repo downloaded).
 
     Args:
         -e: Extract strings
@@ -42,7 +42,11 @@ class Command(BaseCommand):
                     "-F",
                     "babel.cfg",
                     "-o",
-                    "kitsune/locale/templates/LC_MESSAGES/django.pot",
+                    "locale/templates/LC_MESSAGES/django.pot",
+                    "--keyword",
+                    "_lazy",
+                    "--keyword",
+                    "pgettext_lazy",
                     "-c",
                     "L10n",
                     "-w",
@@ -61,7 +65,7 @@ class Command(BaseCommand):
                     "-F",
                     "babeljs.cfg",
                     "-o",
-                    "kitsune/locale/templates/LC_MESSAGES/djangojs.pot",
+                    "locale/templates/LC_MESSAGES/djangojs.pot",
                     "-c",
                     "L10n",
                     "-w",
@@ -82,11 +86,11 @@ class Command(BaseCommand):
                     "pybabel",
                     "update",
                     "-d",
-                    "kitsune/locale/",
+                    "locale/",
                     "-D",
                     "django",
                     "-i",
-                    "kitsune/locale/templates/LC_MESSAGES/django.pot",
+                    "locale/templates/LC_MESSAGES/django.pot",
                 ]
             )
             CommandLineInterface().run(
@@ -94,11 +98,11 @@ class Command(BaseCommand):
                     "pybabel",
                     "update",
                     "-d",
-                    "kitsune/locale/",
+                    "locale/",
                     "-D",
                     "djangojs",
                     "-i",
-                    "kitsune/locale/templates/LC_MESSAGES/djangojs.pot",
+                    "locale/templates/LC_MESSAGES/djangojs.pot",
                 ]
             )
             self.stdout.write("Update complete.\n")
