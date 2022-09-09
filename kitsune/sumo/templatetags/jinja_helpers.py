@@ -20,7 +20,7 @@ from django.utils.translation import ugettext as _
 from django.utils.translation import ugettext_lazy as _lazy
 from django.utils.translation import ungettext
 from django_jinja import library
-from jinja2.utils import Markup
+from markupsafe import Markup
 from pytz import timezone
 
 from kitsune.products.models import Product
