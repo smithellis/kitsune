@@ -1,0 +1,36 @@
+#header {
+    background-color: #FFFFFF;
+}
+
+#header a:link {
+    color: #005e5e;
+}
+
+div.breadcrumbs {
+    background-color: #00458b;
+}
+
+#user-tools {
+    color: #00458b;
+    font-size: 14px;
+}
+
+#user-tools a:visited {
+    color: #ff4f5e;
+}
+
+.module caption {
+    background-color: #005e5e;
+}
+
+a:link {
+    color: #00ffff;
+}
+
+a:visited {
+    color: #ff4f5e;
+}
+
+.module h2, .module caption, .inline-group h2 {
+    background-color: #005e5e;
+}
