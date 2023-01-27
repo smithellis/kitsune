@@ -103,7 +103,7 @@ def visitors_by_locale(start_date, end_date):
     return visits_by_locale
 
 
-def pageviews_by_document(start_date, end_date, verbose=False):
+def pageviews_by_document(start_date, end_date, verbose=True):
     """Return the number of pageviews by document in a given date range.
 
     * Only returns en-US documents for now since that's what we did with

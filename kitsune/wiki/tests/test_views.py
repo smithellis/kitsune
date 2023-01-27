@@ -1538,6 +1538,7 @@ class WhatLinksWhereTests(TestCaseBase):
         ).document
 
         url = reverse("wiki.what_links_here", args=[d1.slug], locale="de")
+        print(f"This is the URL: {url}")
         resp = self.client.get(url, follow=True)
         self.assertEqual(200, resp.status_code)
         assert b"DAS-2" in resp.content

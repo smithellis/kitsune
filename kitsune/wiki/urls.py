@@ -35,7 +35,7 @@ document_patterns = [
         r"^get-votes-async", views.get_helpful_votes_async, name="wiki.get_helpful_votes_async"
     ),
     # KB discussion forums
-    re_path(r"^discuss", include("kitsune.kbforums.urls")),
+    re_path(r"^discuss/", include("kitsune.kbforums.urls")),
     # Delete a revision
     re_path(
         r"^revision/(?P<revision_id>\d+)/delete$",
@@ -101,7 +101,7 @@ urlpatterns = [
     ),
     # Redirect for the old how to contribute page.
     re_path(
-        r"^How to contribute/$",
+        r"^How to contribute$",
         redirect_to,
         {"url": "landings.contribute"},
         name="old_get_involved",
@@ -138,7 +138,7 @@ urlpatterns = [
         name="wiki.ready_unwatch",
     ),
     # Unhelfpul vote survey
-    re_path(r"^unhelpful-survey/", views.unhelpful_survey, name="wiki.unhelpful_survey"),
+    re_path(r"^unhelpful-survey", views.unhelpful_survey, name="wiki.unhelpful_survey"),
     re_path(r"^json$", views.json_view, name="wiki.json"),
     re_path(r"^revisions", views.recent_revisions, name="wiki.revisions"),
     re_path(r"^new$", views.new_document, name="wiki.new_document"),
@@ -146,7 +146,7 @@ urlpatterns = [
     re_path(r"^preview-wiki-content$", views.preview_revision, name="wiki.preview"),
     re_path(r"^save_draft$", views.draft_revision, name="wiki.draft_revision"),
     re_path(r"^category/(?P<category>\d+)$", views.list_documents, name="wiki.category"),
-    re_path(r"^(?P<document_slug>[^/]+)/?$", include(document_patterns)),
+    re_path(r"^(?P<document_slug>[^/]+)/", include(document_patterns)),
 ]
 
 urlpatterns += [

@@ -133,7 +133,7 @@ class TestWikiParser(TestCase):
     def test_image_params_page(self):
         """build_hook_params handles wiki pages."""
         _, params = build_hook_params_default("t|page=Installing Firefox")
-        self.assertEqual("/en-US/kb/installing-firefox", params["link"])
+        self.assertEqual("/en-US/kb/installing-firefox/", params["link"])
         assert params["found"]
 
     def test_image_params_link(self):
@@ -145,7 +145,7 @@ class TestWikiParser(TestCase):
         """_build_image_params - wiki page overrides link."""
         text = "t|page=Installing Firefox|link=http://example.com"
         _, params = build_hook_params_default(text)
-        self.assertEqual("/en-US/kb/installing-firefox", params["link"])
+        self.assertEqual("/en-US/kb/installing-firefox/", params["link"])
 
     def test_image_params_align(self):
         """Align valid options."""
@@ -201,7 +201,7 @@ class TestWikiParser(TestCase):
         self.assertEqual(
             {
                 "found": True,
-                "url": "/en-US/kb/installing-firefox",
+                "url": "/en-US/kb/installing-firefox/",
                 "text": "Installing Firefox",
             },
             _get_wiki_link("Installing Firefox", locale=settings.WIKI_DEFAULT_LANGUAGE),
@@ -285,14 +285,14 @@ class TestWikiInternalLinks(TestCase):
     def test_simple(self):
         """Simple internal link markup."""
         link = pq_link(self.p, "[[Installing Firefox]]")
-        self.assertEqual("/en-US/kb/installing-firefox", link.attr("href"))
+        self.assertEqual("/en-US/kb/installing-firefox/", link.attr("href"))
         self.assertEqual("Installing Firefox", link.text())
         assert not link.hasClass("new")
 
     def test_simple_markup(self):
         text = "[[Installing Firefox]]"
         self.assertEqual(
-            '<p><a href="/en-US/kb/installing-firefox">' + "Installing Firefox</a></p>",
+            '<p><a href="/en-US/kb/installing-firefox/">' + "Installing Firefox</a></p>",
             self.p.parse(text).replace("\n", ""),
         )
 
@@ -317,12 +317,12 @@ class TestWikiInternalLinks(TestCase):
     def test_link_name(self):
         """Internal link with name."""
         link = pq_link(self.p, "[[Installing Firefox|this name]]")
-        self.assertEqual("/en-US/kb/installing-firefox", link.attr("href"))
+        self.assertEqual("/en-US/kb/installing-firefox/", link.attr("href"))
         self.assertEqual("this name", link.text())
 
     def test_link_with_extra_pipe(self):
         link = pq_link(self.p, "[[Installing Firefox|with|pipe]]")
-        self.assertEqual("/en-US/kb/installing-firefox", link.attr("href"))
+        self.assertEqual("/en-US/kb/installing-firefox/", link.attr("href"))
         self.assertEqual("with|pipe", link.text())
 
     def test_hash_name(self):
@@ -369,13 +369,13 @@ class TestWikiInternalLinks(TestCase):
         # Without an approved revision, link should go to en-US doc.
         # The site should stay in fr locale (/<locale>/<en-US slug>).
         link = pq(self.p.parse("[[A doc]]", locale="fr"))
-        self.assertEqual("/fr/kb/a-doc", link.find("a").attr("href"))
+        self.assertEqual("/fr/kb/a-doc/", link.find("a").attr("href"))
         self.assertEqual("A doc", link.find("a").text())
 
         # Approve a revision. Now link should go to fr doc.
         ApprovedRevisionFactory(document=fr_d)
         link = pq(self.p.parse("[[A doc]]", locale="fr"))
-        self.assertEqual("/fr/kb/une-doc", link.find("a").attr("href"))
+        self.assertEqual("/fr/kb/une-doc/", link.find("a").attr("href"))
         self.assertEqual("Une doc", link.find("a").text())
 
 
@@ -449,7 +449,7 @@ class TestWikiImageTags(TestCase):
 
         self.assertEqual("test.jpg", img.attr("alt"))
         self.assertEqual(self.img.file.url, img.attr("src"))
-        self.assertEqual("/en-US/kb/installing-firefox", img_a.attr("href"))
+        self.assertEqual("/en-US/kb/installing-firefox/", img_a.attr("href"))
 
     def test_page_link_edit(self):
         """Link to a nonexistent wiki page."""
@@ -583,4 +583,4 @@ class TestWikiImageTags(TestCase):
         img_a = pq_img(self.p, "[[Image:test.jpg|page=Installing Firefox]]", "a")
         img = img_a("img")
         assert "frameless" in img.attr("class")
-        self.assertEqual("/en-US/kb/installing-firefox", img_a.attr("href"))
+        self.assertEqual("/en-US/kb/installing-firefox/", img_a.attr("href"))

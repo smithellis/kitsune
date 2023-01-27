@@ -16,8 +16,8 @@ class RedirectTestCase(TestCase):
         ("firefox/3.6.12/WINNT/fr/", "/fr/"),
         ("firefox/3.6.12/WINNT/fr-FR/", "/fr/"),
         ("firefox-home/1.1/iPhone/en-US/", "/en-US/"),
-        ("firefox/4.0/Linux/en-US/prefs-applications", "/en-US/kb/Applications"),
-        ("firefox/4.0/Linux/en-US/prefs-applications/", "/en-US/kb/Applications"),
+        ("firefox/4.0/Linux/en-US/prefs-applications", "/en-US/kb/Applications/"),
+        ("firefox/4.0/Linux/en-US/prefs-applications/", "/en-US/kb/Applications/"),
         ("firefox/5.0/NONE/en-US/", "/en-US/does-not-exist"),
         # temporarily disabled during django upgrade
         # TODO: fix prior to production push
@@ -41,8 +41,8 @@ class RedirectTestCase(TestCase):
         ("firefox/3.6.12/WINNT/fr/eu/", "/fr/"),
         ("firefox/3.6.12/WINNT/fr-FR/eu/", "/fr/"),
         ("firefox-home/1.1/iPhone/en-US/eu/", "/en-US/"),
-        ("firefox/4.0/Linux/en-US/eu/prefs-applications", "/en-US/kb/Applications"),
-        ("firefox/4.0/Linux/en-US/eu/prefs-applications/", "/en-US/kb/Applications"),
+        ("firefox/4.0/Linux/en-US/eu/prefs-applications", "/en-US/kb/Applications/"),
+        ("firefox/4.0/Linux/en-US/eu/prefs-applications/", "/en-US/kb/Applications/"),
         ("firefox/5.0/NONE/en-US/eu/", "/en-US/does-not-exist"),
         # temporarily disabled during django upgrade
         # TODO: fix prior to production push
@@ -50,7 +50,7 @@ class RedirectTestCase(TestCase):
         ("firefox/4.0/Android/en-US/eu/foo", 404),
         # Basque is awesome.
         ("firefox/30.0/WINNT/eu/eu/", "/eu/"),
-        ("firefox/4.0/Linux/eu/eu/prefs-applications", "/eu/kb/Applications"),
+        ("firefox/4.0/Linux/eu/eu/prefs-applications", "/eu/kb/Applications/"),
     )
 
     def setUp(self):
