@@ -3,6 +3,32 @@ import trackEvent from "sumo/js/analytics";
 import SwitchingDevicesWizardManager from "sumo/js/switching-devices-wizard-manager";
 import "sumo/js/form-wizard";
 
-$(document).ready(function() {
+document.addEventListener("DOMContentLoaded", function () {
   new SwitchingDevicesWizardManager(document.querySelector("#switching-devices-wizard"))
+  kbTabsInit();
 });
+
+function kbTabsInit() {
+  document.getElementById("kb-tab-all").style.display = "block";
+  let tabItems = document.querySelectorAll('[data-event-category="link click"]');
+  tabItems.forEach((item) => {
+    item.addEventListener("click", (ev) => {
+      toggleTabContent(ev);
+    });
+  });
+}
+
+function toggleTabContent(ev) {
+  let tabContent = document.getElementsByClassName("topic-list");
+  [].forEach.call(tabContent, (el) => {
+    el.style.display = "none";
+  });
+
+  let tabItems = document.getElementsByClassName("tabs--link");
+  [].forEach.call(tabItems, (item) => {
+    item.classList.remove("is-active");
+  });
+
+  ev.target.parentElement.classList.add("is-active");
+  document.getElementById("tab-" + ev.target.parentElement.dataset.eventLabel).style.display = "block";
+}
