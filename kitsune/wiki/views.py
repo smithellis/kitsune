@@ -466,6 +466,9 @@ def edit_document(request, document_slug, revision_id=None):
         return_parent_if_no_translation=True,
     )
 
+    if not doc.allows(user, "create_revision"):
+        raise PermissionDenied
+
     if doc.locale != request.LANGUAGE_CODE:
         # We've fallen back to the parent, since no visible translation existed.
         url = reverse("wiki.translate", locale=request.LANGUAGE_CODE, args=[document_slug])
@@ -475,41 +478,29 @@ def edit_document(request, document_slug, revision_id=None):
     # translate view. Pass it on.
     if doc.parent:
         return translate(request, doc.parent.slug, revision_id)
-
-    if not doc.allows(user, "create_revision"):
-        raise PermissionDenied
-
     if revision_id:
         rev = get_object_or_404(Revision, pk=revision_id, document=doc)
     else:
         rev = doc.current_revision or doc.revisions.order_by("-created", "-id")[0]
 
-    if request.method == "GET":
+    # POST
+    if request.method == "POST":
+        rev_form = RevisionForm(request.POST)
+        rev_form.instance.document = doc  # for rev_form.clean()
+        if rev_form.is_valid():
+            _document_lock_clear(doc.id, user.username)
+            _save_rev_and_notify(rev_form, user, doc, base_rev=rev)
+            if "notify-future-changes" in request.POST:
+                EditDocumentEvent.notify(request.user, doc)
+            return HttpResponseRedirect(reverse("wiki.document_revisions", args=[document_slug]))
+
+    # GET
+    # We have to do this to reset the rev_form if there is an explicit GET
+    # vs. using a potentially broken POST form.
+    else:
         rev_form = RevisionForm(instance=rev, initial={"based_on": rev.id, "comment": ""})
-        show_revision_warning = _show_revision_warning(doc, rev)
-        locked, locked_by = _document_lock(doc.id, user.username)
 
-        return render(
-            request,
-            "wiki/edit.html",
-            {
-                "revision_form": rev_form,
-                "document": doc,
-                "show_revision_warning": show_revision_warning,
-                "locked": locked,
-                "locked_by": locked_by,
-            },
-        )
-
-    _document_lock_clear(doc.id, user.username)
-    rev_form = RevisionForm(request.POST)
-    rev_form.instance.document = doc  # for rev_form.clean()
-    if rev_form.is_valid():
-        _save_rev_and_notify(rev_form, user, doc, base_rev=rev)
-        if "notify-future-changes" in request.POST:
-            EditDocumentEvent.notify(request.user, doc)
-        return HttpResponseRedirect(reverse("wiki.document_revisions", args=[document_slug]))
-
+    # GET or Invalid POST
     show_revision_warning = _show_revision_warning(doc, rev)
     locked, locked_by = _document_lock(doc.id, user.username)
 
