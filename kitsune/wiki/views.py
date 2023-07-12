@@ -531,35 +531,27 @@ def edit_document_metadata(request, document_slug, revision_id=None):
         return_parent_if_no_translation=True,
     )
 
+    if not doc.allows(user, "edit") or not user.is_staff:
+        raise PermissionDenied
+
     if doc.locale != request.LANGUAGE_CODE:
         # We've fallen back to the parent, since no visible translation existed.
         url = reverse("wiki.translate", locale=request.LANGUAGE_CODE, args=[document_slug])
         return HttpResponseRedirect(url)
 
+    can_edit_needs_change = doc.allows(user, "edit_needs_change")
+    can_archive = doc.allows(user, "archive")
+
     # If this document has a parent, then the edit is handled by the
     # translate view. Pass it on.
     if doc.parent:
         return translate(request, doc.parent.slug, revision_id)
-
-    if not (doc.allows(user, "edit") and user.is_staff):
-        raise PermissionDenied
-
-    can_edit_needs_change = doc.allows(user, "edit_needs_change")
-    can_archive = doc.allows(user, "archive")
-
     if revision_id:
         rev = get_object_or_404(Revision, pk=revision_id, document=doc)
     else:
         rev = doc.current_revision or doc.revisions.order_by("-created", "-id")[0]
 
-    if request.method == "GET":
-        doc_form = DocumentForm(
-            initial=_document_form_initial(doc),
-            can_archive=can_archive,
-            can_edit_needs_change=can_edit_needs_change,
-        )
-
-    else:  # POST
+    if request.method == "POST":  # POST
         _document_lock_clear(doc.id, user.username)
 
         post_data = request.POST.copy()
@@ -589,8 +581,16 @@ def edit_document_metadata(request, document_slug, revision_id=None):
             else:
                 # Do we need to rebuild the KB?
                 _maybe_schedule_rebuild(doc_form)
-
                 return HttpResponseRedirect(reverse("wiki.document", args=[doc.slug]))
+    else:  # GET
+        # We can't drop this ELSE because we need to account for bad POSTs
+        # if the doc_form.is_valid() fails, we need to re-render the form
+        # with the errors vs. resetting the form to the GET state.
+        doc_form = DocumentForm(
+            initial=_document_form_initial(doc),
+            can_archive=can_archive,
+            can_edit_needs_change=can_edit_needs_change,
+        )
 
     show_revision_warning = _show_revision_warning(doc, rev)
     locked, locked_by = _document_lock(doc.id, user.username)

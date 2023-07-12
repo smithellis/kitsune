@@ -2131,9 +2131,7 @@ class TestDocumentLocking(TestCaseBase):
     def test_trans_lock_workflow(self):
         """End to end test of locking on a translated document."""
         trans_doc = TranslatedRevisionFactory().document
-        edit_url = reverse(
-            "wiki.edit_document_metadata", locale=trans_doc.locale, args=[trans_doc.slug]
-        )
+        edit_url = reverse("wiki.edit_document", locale=trans_doc.locale, args=[trans_doc.slug])
         self._lock_workflow(trans_doc, edit_url)
 
 
