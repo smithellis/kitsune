@@ -31,9 +31,6 @@
           {% endtrans %}
         </p>
       {% endif %}
-      {% if request.user.is_staff %}
-        <p><a href="{{ url('wiki.edit_document_metadata', document.slug) }}" class="sumo-button primary-button">{{ _('Edit Article Description') }}</a></p>
-      {% endif %}
       <p>
         {% trans url=url('wiki.document', 'support-document-guide') %}For help with writing articles, check out the
           <a href="{{ url }}">Support Document Guide</a>.{% endtrans %}

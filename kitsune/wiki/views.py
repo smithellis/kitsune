@@ -452,10 +452,7 @@ def steal_lock(request, document_slug, revision_id=None):
     return HttpResponse("", status=200 if ok else 400)
 
 
-@require_http_methods(["GET", "POST"])
-@login_required
-def edit_document(request, document_slug, revision_id=None):
-    """Create a new revision of a wiki document"""
+def get_doc_and_rev(request, document_slug, revision_id):
     user = request.user
 
     doc = get_visible_document_or_404(
@@ -465,9 +462,6 @@ def edit_document(request, document_slug, revision_id=None):
         look_for_translation_via_parent=True,
         return_parent_if_no_translation=True,
     )
-
-    if not doc.allows(user, "create_revision"):
-        raise PermissionDenied
 
     if doc.locale != request.LANGUAGE_CODE:
         # We've fallen back to the parent, since no visible translation existed.
@@ -482,6 +476,19 @@ def edit_document(request, document_slug, revision_id=None):
         rev = get_object_or_404(Revision, pk=revision_id, document=doc)
     else:
         rev = doc.current_revision or doc.revisions.order_by("-created", "-id")[0]
+
+    return user, doc, rev
+
+
+@require_http_methods(["GET", "POST"])
+@login_required
+def edit_document(request, document_slug, revision_id=None):
+    """Create a new revision of a wiki document"""
+
+    user, doc, rev = get_doc_and_rev(request, document_slug, revision_id)
+
+    if not doc.allows(user, "create_revision"):
+        return PermissionDenied
 
     # POST
     if request.method == "POST":
@@ -521,35 +528,14 @@ def edit_document(request, document_slug, revision_id=None):
 @login_required
 def edit_document_metadata(request, document_slug, revision_id=None):
     """Edit document metadata."""
-    user = request.user
 
-    doc = get_visible_document_or_404(
-        user,
-        locale=request.LANGUAGE_CODE,
-        slug=document_slug,
-        look_for_translation_via_parent=True,
-        return_parent_if_no_translation=True,
-    )
+    user, doc, rev = get_doc_and_rev(request, document_slug, revision_id)
 
-    if not doc.allows(user, "edit") or not user.is_staff:
-        raise PermissionDenied
+    if not doc.allows(user, "edit"):
+        return PermissionDenied
 
-    if doc.locale != request.LANGUAGE_CODE:
-        # We've fallen back to the parent, since no visible translation existed.
-        url = reverse("wiki.translate", locale=request.LANGUAGE_CODE, args=[document_slug])
-        return HttpResponseRedirect(url)
-
-    can_edit_needs_change = doc.allows(user, "edit_needs_change")
     can_archive = doc.allows(user, "archive")
-
-    # If this document has a parent, then the edit is handled by the
-    # translate view. Pass it on.
-    if doc.parent:
-        return translate(request, doc.parent.slug, revision_id)
-    if revision_id:
-        rev = get_object_or_404(Revision, pk=revision_id, document=doc)
-    else:
-        rev = doc.current_revision or doc.revisions.order_by("-created", "-id")[0]
+    can_edit_needs_change = doc.allows(user, "edit_needs_change")
 
     if request.method == "POST":  # POST
         _document_lock_clear(doc.id, user.username)
@@ -1010,7 +996,8 @@ def translate(request, document_slug, revision_id=None):
 
                     if which_form == "doc":
                         url = urlparams(
-                            reverse("wiki.edit_document", args=[doc.slug]), opendescription=1
+                            reverse("wiki.edit_document_metadata", args=[doc.slug]),
+                            opendescription=1,
                         )
                         return HttpResponseRedirect(url)
 

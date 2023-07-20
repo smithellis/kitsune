@@ -28,8 +28,8 @@
             <a href="{{ url('wiki.edit_document', document.slug) }}">{{ _('Edit Article') }}</a>
           </li>
             {% if request.user.is_staff %}
-            <li {{ active|class_selected('edit_doc') }}>
-              <a href="{{ url('wiki.edit_document_metadata', document.slug) }}">{{ _('Edit Article Description') }}</a>
+            <li {{ active|class_selected('edit_metadata') }}>
+              <a href="{{ url('wiki.edit_document_metadata', document.slug) }}">{{ _('Edit Article Metadata') }}</a>
             </li>
             {% endif %}
           {% endif %}

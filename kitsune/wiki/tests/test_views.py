@@ -2034,8 +2034,8 @@ class TestDocumentLocking(TestCaseBase):
             raise SkipTest
 
     def _test_lock_helpers(self, doc):
-        u1 = UserFactory()
-        u2 = UserFactory()
+        u1 = UserFactory(is_staff=True)
+        u2 = UserFactory(is_staff=True)
 
         # No one has the document locked yet.
         self.assertEqual(_document_lock_check(doc.id), None)

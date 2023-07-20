@@ -990,7 +990,7 @@ class NewRevisionTests(TestCaseBase):
 
         # Verify there is a warning box
         response = self.client.get(
-            reverse("wiki.edit_document", locale=doc.locale, args=[doc.slug])
+            reverse("wiki.edit_document_metadata", locale=doc.locale, args=[doc.slug])
         )
         assert len(pq(response.content)(".mzp-t-warning"))
 
@@ -2179,7 +2179,9 @@ class TranslateTests(TestCaseBase):
         data["form"] = "doc"
         response = self.client.post(url, data)
         self.assertEqual(302, response.status_code)
-        self.assertEqual("/es/kb/un-test-articulo/edit?opendescription=1", response["location"])
+        self.assertEqual(
+            "/es/kb/un-test-articulo/edit/metadata?opendescription=1", response["location"]
+        )
         revisions = rev_es.document.revisions.all()
         self.assertEqual(1, revisions.count())  # No new revisions
         d = Document.objects.get(id=rev_es.document.id)

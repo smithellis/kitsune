@@ -10,7 +10,7 @@
                  (None, _('Edit Article Metadata'))] %}
 
 {% set scripts = ('wiki', 'wiki.diff', 'wiki.editor') %}
-{% set classes = 'edit_doc' %}
+{% set classes = 'edit_metadata' %}
 
 {% block content %}
   <div class="user-messages">
@@ -56,5 +56,5 @@
 {% endblock %}
 
 {% block side_top %}
-  {{ document_tools(document, document.parent, user, 'edit_doc', settings) }}
+  {{ document_tools(document, document.parent, user, 'edit_metadata', settings) }}
 {% endblock %}
