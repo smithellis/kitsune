@@ -117,7 +117,7 @@
         data-event-category="link click"
         data-event-action="{{ location }}"
         data-event-label="aaq widget">
-        {% if aaq_context.has_subscriptions %}
+        {% if aaq_context.has_subscriptions  %}
           {{ _('Contact Support') }}
         {% else %}
           {{ _('Ask Now') }}
