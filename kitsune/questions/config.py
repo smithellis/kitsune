@@ -494,17 +494,6 @@ products = OrderedDict(
             },
         ),
         (
-            "pocket",
-            {
-                "name": _lazy("Pocket"),
-                "subtitle": _lazy("The web’s most intriguing articles"),
-                "extra_fields": [],
-                "tags": ["pocket"],
-                "product": "pocket",
-                "categories": OrderedDict([]),
-            },
-        ),
-        (
             "hubs",
             {
                 "name": _lazy("Hubs"),
@@ -644,6 +633,44 @@ products = OrderedDict(
                                 "name": _lazy("Firefox Focus for Android"),
                                 "topic": "firefox-focus-android",
                                 "tags": ["firefox-focus-android"],
+                            },
+                        ),
+                    ]
+                ),
+            },
+        ),
+        (
+            "mozilla-account",
+            {
+                "name": _lazy("Mozilla Account"),
+                "subtitle": _lazy("Mozilla account is the account system for Mozilla"),
+                "extra_fields": [],
+                "tags": [],
+                "product": "mozilla-account",
+                "categories": OrderedDict(
+                    [
+                        (
+                            "passwords-and-recovery",
+                            {
+                                "name": _lazy("Passwords & recovery"),
+                                "topic": "passwords-and-recovery",
+                                "tags": ["passwords-and-recovery"],
+                            },
+                        ),
+                        (
+                            "security-and-privacy",
+                            {
+                                "name": _lazy("Security & privacy"),
+                                "topic": "security-and-privacy",
+                                "tags": ["security-and-privacy"],
+                            },
+                        ),
+                        (
+                            "subscriptions-and-billing",
+                            {
+                                "name": _lazy("Subscriptions & billing"),
+                                "topic": "subscriptions-and-billing",
+                                "tags": ["subscriptions-and-billing"],
                             },
                         ),
                     ]
