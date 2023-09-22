@@ -1751,11 +1751,28 @@ def parse_accept_lang_header(lang_string):
     return result
 
 
-def pocket_article(request, article_id=None, document_slug=None, extra_path=None):
+def pocket_article(request, url_path=None, document_slug=None):
     """Pocket articles migrated to SUMO are redirected to the new URL"""
-    # If we migrated the document, we should be able to find it
-    if Document.objects.filter(slug=document_slug).exists():
-        return HttpResponseRedirect(reverse("wiki.document", args=[document_slug]))
+    # Parse the url_path to get the document section, if applicable
+    # as well as any further path that might have come over from Pocket
+    # in case we become interested in working with that data.
+    # This version assumes anything from help.getpocket.com/* is
+    # redirected to /kb/pocket
+    url_parts = url_path.split("/")
+
+    # See if the first piece is an article path:
+    # url_parts[0] should be 'article' for articles
+    if url_parts[0] == "article":
+        # [1] should be the article section
+        article_section = url_parts[1] if len(url_parts) > 0 else None
+        # Let's see if it matches the article pattern we expect
+        # and if it does we'll use it to get the slug
+        if re.match(r"^\d+-[\w-]+$", article_section):
+            # This looks like a valid article section, get the slug
+            document_slug = re.sub(r"^\d+-", "", article_section)
+        # If we migrated the document, we should be able to find it
+        if Document.objects.filter(slug=document_slug).exists():
+            return HttpResponseRedirect(reverse("wiki.document", args=[document_slug]))
     # If document doesn't exist, fail back to Pocket product page with message
     messages.warning(
         request,

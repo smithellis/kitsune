@@ -165,9 +165,9 @@ urlpatterns += [
 urlpatterns += [
     # Redirect for pocket articles
     # This assumes pocket redirects take the form of:
-    # /pocket/<article_id>-<document_slug>
+    # /kb/pocket/<article_id>-<document_slug>
     re_path(
-        r"^/pocket/(?:(?P<article_id>\d+)-)?(?P<document_slug>[\w-]+)(?P<extra_path>/[\w/-]*)?/?$",
+        r"^/pocket/(?P<url_path>.+)$",
         views.pocket_article,
         name="wiki.pocket_article",
     ),
