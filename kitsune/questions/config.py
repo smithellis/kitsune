@@ -647,34 +647,7 @@ products = OrderedDict(
                 "extra_fields": [],
                 "tags": [],
                 "product": "mozilla-account",
-                "categories": OrderedDict(
-                    [
-                        (
-                            "passwords-and-recovery",
-                            {
-                                "name": _lazy("Passwords & recovery"),
-                                "topic": "passwords-and-recovery",
-                                "tags": ["passwords-and-recovery"],
-                            },
-                        ),
-                        (
-                            "security-and-privacy",
-                            {
-                                "name": _lazy("Security & privacy"),
-                                "topic": "security-and-privacy",
-                                "tags": ["security-and-privacy"],
-                            },
-                        ),
-                        (
-                            "subscriptions-and-billing",
-                            {
-                                "name": _lazy("Subscriptions & billing"),
-                                "topic": "subscriptions-and-billing",
-                                "tags": ["subscriptions-and-billing"],
-                            },
-                        ),
-                    ]
-                ),
+                "categories": OrderedDict([]),
             },
         ),
     ]

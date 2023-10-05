@@ -90,12 +90,20 @@ we can compute the edit-title URL.
               {% endif %}
 
               <div class="info card shade-bg highlight mb">
+              {% if current_product.key == 'mozilla-account' %}
+                {% trans %}
+                  Can't sign in to your account and need help? 
+                  You've found the right place.  Complete the form below
+                  to contact our support staff.
+                {% endtrans %}
+              {% else %}
                 {% trans %}
                   Be descriptive.
                   Saying “playing video on YouTube is always choppy”
                   will help us understand the issue better than saying
                   “something is wrong” or “the app is broken”.
                 {% endtrans %}
+              {% endif %}
               </div>
 
               {% for field in form.hidden_fields() %}

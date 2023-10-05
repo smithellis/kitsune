@@ -30,6 +30,7 @@ from zenpy.lib.exception import APIException
 
 from kitsune.access.decorators import login_required, permission_required
 from kitsune.customercare.forms import ZendeskForm
+from kitsune.customercare.zendesk import CATEGORY_CHOICES, CATEGORY_CHOICES_LOGINLESS
 from kitsune.flagit.models import FlaggedObject
 from kitsune.products.models import Product, Topic
 from kitsune.questions import config
@@ -533,8 +534,19 @@ def aaq(request, product_key=None, category_key=None, step=1):
 
             return HttpResponseRedirect(path)
 
-        if has_subscriptions:
-            zendesk_form = ZendeskForm(data=request.POST or None, product=product)
+        # If product is mozilla-account and not logged in, use CATEGORY_CHOICES_LOGINLESS
+        if product_key == "mozilla-account" and not request.user.is_authenticated:
+            categories = CATEGORY_CHOICES_LOGINLESS
+        else:
+            categories = CATEGORY_CHOICES
+
+        if has_subscriptions or product_key == "mozilla-account":
+            zendesk_form = ZendeskForm(
+                data=request.POST or None,
+                product=product,
+                categories=categories,
+                user=request.user,
+            )
             context["form"] = zendesk_form
 
             if zendesk_form.is_valid():
@@ -563,6 +575,7 @@ def aaq(request, product_key=None, category_key=None, step=1):
             return render(request, template, context)
 
         form = NewQuestionForm(
+            categories=categories,
             product=product_config,
             data=request.POST or None,
             initial={"category": category_key},
@@ -617,7 +630,6 @@ def aaq_step2(request, product_key):
     return aaq(request, product_key=product_key, step=2)
 
 
-@login_required
 def aaq_step3(request, product_key, category_key=None):
     """Step 3: Show full question form."""
     return aaq(
