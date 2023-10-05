@@ -7,12 +7,21 @@ from zenpy.lib.api_objects import User as ZendeskUser
 
 # See docs/zendesk.md for details about getting the valid choice values for each field:
 CATEGORY_CHOICES = [
-    (None, _lazy("Select a topic")),
+    (None, _lazy("Select a reason for contacting")),
     ("payment", _lazy("Payments & Billing")),
     ("accounts", _lazy("Accounts & Login")),
     ("technical", _lazy("Technical")),
     ("feedback", _lazy("Provide Feedback/Request Features")),
     ("not_listed", _lazy("Not listed")),
+]
+
+CATEGORY_CHOICES_LOGINLESS = [
+    (None, _lazy("Select a reason for contacting")),
+    ("forgot-password", _lazy("I forgot my password")),
+    ("cant-recover-email", _lazy("I can't recover my account using email")),
+    ("issues-with-id", _lazy("I'm having issues signing in with my Google or Apple ID")),
+    ("security-code", _lazy("My security code isn't working or is lost")),
+    ("other", _lazy("I have another sign in issue")),
 ]
 
 OS_CHOICES = [
