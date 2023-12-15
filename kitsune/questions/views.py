@@ -859,6 +859,7 @@ def question_vote(request, question_id):
             vote.creator = request.user
         else:
             vote.anonymous_id = request.anonymous.anonymous_id
+            vote.add_metadata("anonymous_ip", request.META.get("REMOTE_ADDR"))
 
         if not request.limited:
             vote.save()

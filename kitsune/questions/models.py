@@ -91,11 +91,15 @@ class AAQBase(ModelBase):
                 return True
             q_kwargs["creator"] = request.user
             return VoteObject.objects.filter(**q_kwargs).exists()
-        elif request.anonymous.has_id:
+        if request.anonymous.has_id:
             q_kwargs["anonymous_id"] = request.anonymous.anonymous_id
-            return VoteObject.objects.filter(**q_kwargs).exists()
-        else:
-            return False
+            anonymous_ip = request.META.get["REMOTE_ADDR"]
+            if (
+                VoteObject.objects.filter(**q_kwargs).exists()
+                or VoteMetadata.objects.filter(vote=self, anonymous_ip=anonymous_ip).exists()
+            ):
+                return True
+        return False
 
     def clear_cached_html(self):
         cache.delete(self.html_cache_key % self.id)
