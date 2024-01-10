@@ -55,7 +55,7 @@ export class FormWizard extends HTMLElement {
   static get markup() {
     return `
       <template>
-        <div class="form-wizard-root">
+        <div id="form-wizard-root">
           <div class="form-wizard-content">
             <section>
               <ul id="step-indicator"></ul>
@@ -110,13 +110,6 @@ export class FormWizard extends HTMLElement {
   }
 
   connectedCallback() {
-    // Report to GA whether or not the user sees the fox doodle.
-    trackEvent(
-      "device-migration-wizard",
-      "experiments",
-      this.showDoodle ? "doodle-shown" : "doodle-not-shown"
-    );
-
     if (this.activeStep) {
       // Make sure the active step is shown.
       this.#setActiveStepAttributes();
@@ -124,10 +117,17 @@ export class FormWizard extends HTMLElement {
       // If there's no active step, default to the first step.
       this.activeStep = this.firstElementChild?.getAttribute("name");
     }
-  }
 
-  get showDoodle() {
-    return window.waffle?.flag_is_active("show_device_migration_doodle");
+    // We set up our aria attributes here instead of in
+    // hook_device_migration_wizard.html where the <form-wizard> is put into
+    // the markup of the page because that hook is only ever rendered when the
+    // SUMO article embedding the wizard is updated. By adding the attributes here,
+    // we can ensure that the attributes will apply, even for instances of SUMO
+    // kb articles embedding the form-wizard that might not get updated in a while.
+    let root = this.shadowRoot.querySelector("#form-wizard-root");
+    root.setAttribute("role", "dialog");
+    root.setAttribute("aria-label", gettext("Backup assistant"));
+    this.setAttribute("aria-describedby", "form-wizard-root");
   }
 
   get activeStep() {
@@ -219,7 +219,7 @@ export class FormWizard extends HTMLElement {
       child.toggleAttribute("active", child.getAttribute("reason") === reason);
     }
 
-    let root = this.shadowRoot.querySelector(".form-wizard-root");
+    let root = this.shadowRoot.querySelector("#form-wizard-root");
     root.toggleAttribute("inert", true);
   }
 
@@ -293,10 +293,6 @@ export class FormWizard extends HTMLElement {
    * active step. Also toggles visibility.
    */
   #updateDoodle() {
-    if (!this.showDoodle) {
-      return;
-    }
-
     let doodleData = STEP_TO_DOODLE_MAP[this.activeStep];
     if (doodleData) {
       this.#doodle.src = doodleData.src;
@@ -319,6 +315,7 @@ export class FormWizard extends HTMLElement {
         step.slot = "active";
       } else {
         step.slot = "";
+        step.deactivate && step.deactivate();
       }
     }
   }
@@ -437,6 +434,14 @@ export class BaseFormStep extends HTMLElement {
     let prevState = Object.assign({}, this.#state);
     this.#state = Object.assign(this.#state, nextState);
     this.render(prevState, this.#state);
+  }
+
+  /**
+   * Method that can be implemented to handle any clean up needed when a form
+   * step is no longer active e.g. clearing error states.
+   */
+  deactivate() {
+    // NOOP
   }
 
   /**

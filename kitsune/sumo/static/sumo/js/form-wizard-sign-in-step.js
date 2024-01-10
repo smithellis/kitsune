@@ -36,7 +36,7 @@ export class SignInStep extends BaseFormStep {
             <label for="email">${gettext("Enter your email")}</label>
             <div class="tooltip-container">
               <aside id="email-error" class="tooltip">${gettext("Valid email required")}</aside>
-              <input id="email" name="email" type="email" required="true" placeholder="${gettext("user@example.com")}"/>
+              <input id="email" name="email" type="email" required="true" placeholder="${gettext("user@example.com")}" pending-autofocus="" />
             </div>
 
             <button id="continue" class="mzp-c-button mzp-t-product" type="submit" data-event-category="device-migration-wizard" data-event-action="click">${gettext("Continue")}</button>
@@ -78,6 +78,13 @@ export class SignInStep extends BaseFormStep {
     this.#emailEl.removeEventListener("input", this);
   }
 
+  deactivate() {
+    if (this.shadowRoot.activeElement == this.#emailEl) {
+      this.#emailEl.blur();
+      this.#emailErrorEl.classList.remove("visible");
+    }
+  }
+
   handleEvent(event) {
     switch (event.type) {
       case "blur": {
@@ -96,6 +103,18 @@ export class SignInStep extends BaseFormStep {
         if (!this.#emailEl.validity.valid) {
           this.#emailErrorEl.classList.add("visible");
           event.preventDefault();
+        } else {
+          // The email is valid and we're about to redirect to FxA login.
+          // Let's quickly stash the email address in session storage so
+          // that we can prefill the email field in Step 3 for getting
+          // the reminder email.
+          try {
+            sessionStorage.setItem("switching-devices-email", this.#emailEl.value);
+          } catch (e) {
+            // We wrap this in a try/catch because session storage methods might
+            // throw if the user has disabled cookies or other types of site
+            // data storage, and we want this to be non-fatal.
+          }
         }
         break;
       }
@@ -146,6 +165,18 @@ export class SignInStep extends BaseFormStep {
         fieldEl.value = this.state[fieldName];
       } else {
         fieldEl.disabled = true;
+      }
+    }
+
+    // If we've reached the point where we've got hasUpdatedFxAState set true,
+    // this means that we've confirmed that we're running on a non-disqualified
+    // version of Firefox Desktop. If focus hasn't moved anywhere else in the
+    // meantime, we'll move focus to the email field if it's never been moved
+    // there before.
+    if (this.state.hasUpdatedFxAState && this.#emailEl.hasAttribute("pending-autofocus")) {
+      this.#emailEl.removeAttribute("pending-autofocus");
+      if (document.activeElement == document.body) {
+        this.#emailEl.focus();
       }
     }
 

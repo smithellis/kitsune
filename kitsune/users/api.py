@@ -4,10 +4,11 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db.models import Count, Q
+from django.db.models.functions import Now
 from django.utils.encoding import force_str
 from django.views.decorators.http import require_GET
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, mixins, permissions, serializers, viewsets
+from rest_framework import mixins, permissions, serializers, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -15,7 +16,7 @@ from rest_framework.response import Response
 from kitsune.access.decorators import login_required
 from kitsune.questions.models import Answer
 from kitsune.questions.utils import num_answers, num_questions, num_solutions
-from kitsune.sumo.api_utils import DateTimeUTCField, PermissionMod
+from kitsune.sumo.api_utils import DateTimeUTCField, OrderingFilter, PermissionMod
 from kitsune.sumo.decorators import json_view
 from kitsune.users.models import Profile, Setting
 from kitsune.users.templatetags.jinja_helpers import profile_avatar
@@ -53,14 +54,10 @@ def usernames(request):
     if not request.user.is_authenticated:
         return []
 
-    profile_ids = list(
-        Profile.objects.exclude(is_fxa_migrated=False)
-        .filter(Q(name__istartswith=pre))
-        .values_list("user_id", flat=True)[:10]
-    )
     users = (
-        User.objects.filter(Q(username__istartswith=pre) | Q(id__in=profile_ids))
-        .filter(is_active=True)
+        User.objects.filter(is_active=True)
+        .exclude(profile__is_fxa_migrated=False)
+        .filter(Q(username__istartswith=pre) | Q(profile__name__istartswith=pre))
         .select_related("profile")
     )[:10]
 
@@ -251,7 +248,7 @@ class ProfileViewSet(
     ]
     filter_backends = [
         DjangoFilterBackend,
-        filters.OrderingFilter,
+        OrderingFilter,
     ]
     filterset_fields: list[str] = []
     ordering_fields: list[str] = []
@@ -272,9 +269,10 @@ class ProfileViewSet(
         # in the output of ``ProfileFKSerializer``, whereas ``id`` does not.
         # It also reverse order the dictionary according to amount of solution so that we can get
         # get top contributors
+        # Use "__range" to ensure the database index is used in Postgres.
         raw_counts = (
             Answer.objects.exclude(solution_for=None)
-            .filter(created__gt=start)
+            .filter(created__range=(start, Now()))
             .values("creator__username")
             .annotate(Count("creator"))
             .order_by("creator__count")

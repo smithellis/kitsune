@@ -92,6 +92,61 @@ describe("sign-in-step custom element", () => {
     assertFormElements(form, EXPECTED_FORM_ELEMENTS_WITH_FLOW_METRICS);
   });
 
+  it("should focus the email field automatically after the hasUpdatedFxAState property is set to true", () => {
+    let email = step.shadowRoot.querySelector("#email");
+    expect(step.shadowRoot.activeElement).to.not.equal(email);
+    expect(email.hasAttribute("pending-autofocus")).to.be.true;
+
+    const TEST_STATE = {
+      utm_source: "utm_source",
+      utm_campaign: "utm_campaign",
+      utm_medium: "utm_medium",
+      entrypoint: "entrypoint",
+      entrypoint_experiment: "entrypoint_experiment",
+      entrypoint_variation: "entrypoint_variation",
+      context: "context",
+      redirect_to: window.location.href,
+      redirect_immediately: true,
+      service: "sync",
+      action: "email",
+      hasUpdatedFxAState: true,
+    };
+    step.setState(TEST_STATE);
+
+    expect(step.shadowRoot.activeElement).to.equal(email);
+    expect(email.hasAttribute("pending-autofocus")).to.be.false;
+  });
+
+  it("should not focus the email field automatically if focus moved after the hasUpdatedFxAState property is set to true", () => {
+    let email = step.shadowRoot.querySelector("#email");
+    expect(step.shadowRoot.activeElement).to.not.equal(email);
+    expect(email.hasAttribute("pending-autofocus")).to.be.true;
+
+    let someButton = document.createElement("button");
+    someButton.textContent = "I'm focused first.";
+    document.body.append(someButton);
+    someButton.focus();
+
+    const TEST_STATE = {
+      utm_source: "utm_source",
+      utm_campaign: "utm_campaign",
+      utm_medium: "utm_medium",
+      entrypoint: "entrypoint",
+      entrypoint_experiment: "entrypoint_experiment",
+      entrypoint_variation: "entrypoint_variation",
+      context: "context",
+      redirect_to: window.location.href,
+      redirect_immediately: true,
+      service: "sync",
+      action: "email",
+      hasUpdatedFxAState: true,
+    };
+    step.setState(TEST_STATE);
+
+    expect(step.shadowRoot.activeElement).to.not.equal(email);
+    expect(email.hasAttribute("pending-autofocus")).to.be.false;
+  });
+
   it("should set an email address if one is set in the state", () => {
     const TEST_STATE = {
       utm_source: "utm_source",
@@ -287,8 +342,10 @@ describe("sign-in-step custom element", () => {
     it("should display an error message if an incomplete email address is supplied", () => {
       expect([...emailErrorMessage.classList]).to.not.include("visible");
 
+      expect(sessionStorage.getItem("switching-devices-email")).to.be.null;
       emailField.value = "this-is-not-an-email-address";
       submitBtn.click();
+      expect(sessionStorage.getItem("switching-devices-email")).to.be.null;
 
       expect(emailField.validity.valid).to.be.false;
       expect([...emailErrorMessage.classList]).to.include("visible");
@@ -308,11 +365,15 @@ describe("sign-in-step custom element", () => {
         );
       });
 
-      emailField.value = "email@email.com";
+      expect(sessionStorage.getItem("switching-devices-email")).to.be.null;
+
+      const TEST_EMAIL = "email@email.com";
+      emailField.value = TEST_EMAIL;
       submitBtn.click();
       await preventSubmitListener;
 
       expect(emailField.validity.valid).to.be.true;
+      expect(sessionStorage.getItem("switching-devices-email")).to.equal(TEST_EMAIL);
       expect([...emailErrorMessage.classList]).to.not.include("visible");
     });
   });

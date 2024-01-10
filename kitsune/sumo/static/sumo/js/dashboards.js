@@ -5,6 +5,7 @@
     initNeedsChange();
     initAnnouncements();
     initL10nStringsStats();
+    setProgressBarWidth();
   }
 
   // Hook up readout mode links (like "This Week" and "All Time") to swap
@@ -27,6 +28,7 @@
           $.get($button.attr('data-url'),
           function succeed(html) {
             $table.html(html).removeClass('busy');
+            setProgressBarWidth();
           });
           return false;
         });
@@ -36,7 +38,7 @@
 
   function initWatchMenu() {
     var $watchDiv = $('#doc-watch'),
-      $menu = $watchDiv.find('.popup-menu');
+        $menu = $watchDiv.find('.popup-menu');
 
     // Initialize popup menu behavior:
     $watchDiv.find('.popup-trigger').on("click", function toggleMenu() {
@@ -47,21 +49,21 @@
     // Dim the checkbox, post the watch change, then undim.
     $watchDiv.find('input[type=checkbox]').on("click", function post() {
       var $box = $(this),
-        csrf = $box.closest('form').find('input[name=csrfmiddlewaretoken]').val(),
-        isChecked = $box.attr('checked');
-      $box.attr('disabled', 'disabled');
+          csrf = $box.closest('form').find('input[name=csrfmiddlewaretoken]').val(),
+          isChecked = $box.prop('checked'); // Use .prop() to get the checked state
+      $box.prop('disabled', true); // Disable the checkbox
+
       $.ajax({
         type: 'POST',
-        url: isChecked ? $box.data('action-watch')
-        : $box.data('action-unwatch'),
+        url: isChecked ? $box.data('action-watch') : $box.data('action-unwatch'),
         data: {csrfmiddlewaretoken: csrf},
         success: function() {
-          $box.attr('disabled', '');
+          $box.prop('disabled', false); // Re-enable the checkbox on success
         },
         error: function() {
-          $box.attr('checked', isChecked ? ''
-          : 'checked')
-          .attr('disabled', '');
+          // On error, revert the checked state and re-enable the checkbox
+          $box.prop('checked', !isChecked)
+              .prop('disabled', false);
         }
       });
     });
@@ -192,6 +194,13 @@
           )
         );
       });
+  }
+
+  function setProgressBarWidth() {
+    const graphBars = document.getElementsByClassName("absolute-graph");
+    for (const bar of graphBars) {
+      bar.style.width = bar.getAttribute("data-absolute-graph");
+    }
   }
 
   $(init);
