@@ -4,12 +4,26 @@ from datetime import datetime, timedelta
 from itertools import chain
 
 from django.contrib.auth.models import User
+from kitsune.users.utils import anonymize_user
 
 
 class Command(BaseCommand):
+    help = """
+    Deletes users who:
+    1) Are inactive and haven't logged in during the past year, aren't superusers,
+       and have no revisions or questions that are not archive
+    2) Have not migrated to FxA AKA Mozilla Accounts, aren't superusers, and have
+       no revisions or questions that are not archive
+    Deactivates and anonymizes users who:
+    1) Are inactive and haven't logged in during the past year, aren't superusers,
+       and have revisions or questions that are not archived
+    2) Have not migrated to FxA AKA Mozilla Accounts, aren't superusers, and have
+       revisions or questions that are not archived
+    """
+
     def handle(self, *args, **options):
         # Get users who:
-        # * Are inactive and haven't logged in during the past year - an aren't superusers
+        # * Are inactive and haven't logged in during the past year - and aren't superusers
         # * Have not migrated to FxA AKA Mozilla Accounts and aren't superusers
         # (Leaving out superusers because they are special and testing is no fun
         # when you delete your own account)
@@ -22,42 +36,18 @@ class Command(BaseCommand):
             profile__is_fxa_migrated=False, is_superuser=False
         )
 
-        # If these users don't have revisions, questions, answers or threads
-        # we delete them
+        # If these users don't have revisions or questions that are not archived,
+        # delete the user
         for user in chain(inactive_users, non_fxa_migrated_users):
-            # Get all the content for the user
-            revisions = user.created_revisions.all()
-            questions = user.questions.all()
-            wiki_threads = user.wiki_thread_set.all()
-            answers = user.answers.all()
-            print(user.username + "::", revisions, wiki_threads, questions, answers)
-            # If there is no content owned/created by user, and they haven't logged in
-            # during the past year, delete the user
-            if not (revisions or questions or answers or wiki_threads):
-                print(
-                    "Deleting user: "
-                    + user.username
-                    + " - "
-                    + user.email
-                    + " - "
-                    + str(user.last_login.date())
-                )
+            # Get all the non archived content for the user
+            revisions = user.created_revisions.all().filter(document__is_archived=False)
+            questions = user.questions.all().filter(is_archived=False)
+
+            # If there is no live content owned/created
+            # by user, delete them
+            if not (revisions or questions):
                 user.delete()
             # If they do have content, we are going to deactive them and
             # anonymize their accounts
             else:
-                if not user.username.startswith("Inactive User"):
-                    print(
-                        "Deactivating and Anonymizing user: "
-                        + user.username
-                        + " - "
-                        + user.email
-                        + " - "
-                        + str(user.last_login.date())
-                    )
-                    user.profile.clear()
-                    user.profile.save()
-                    user.is_active = False
-                    user.is_staff = False
-                    user.email = "user" + str(user.id) + "@example.com"
-                    user.save()
+                anonymize_user(user)  # this method also performs the deactivation
