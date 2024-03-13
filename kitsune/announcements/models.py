@@ -10,6 +10,7 @@ from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
 
 from kitsune.sumo.models import ModelBase
+from kitsune.products.models import Product
 from kitsune.sumo.templatetags.jinja_helpers import wiki_to_html
 from kitsune.wiki.models import Locale
 
@@ -38,6 +39,7 @@ class Announcement(ModelBase):
         help_text=("Use wiki syntax or HTML. It will display similar to a document's content."),
     )
     groups = models.ManyToManyField(Group, related_name="announcements", blank=True, null=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, null=True, blank=True)
     locale = models.ForeignKey(Locale, on_delete=models.CASCADE, null=True, blank=True)
     send_email = models.BooleanField(
         default=False,
@@ -72,6 +74,11 @@ class Announcement(ModelBase):
     def get_for_locale_name(cls, locale_name):
         """Returns visible announcements for a given locale name."""
         return cls._visible_query(locale__locale=locale_name)
+
+    @classmethod
+    def get_for_product_slug(cls, product_slug):
+        """Returns visible announcements for a given product."""
+        return cls._visible_query(product__slug=product_slug)
 
     @classmethod
     def _visible_query(cls, **query_kwargs):

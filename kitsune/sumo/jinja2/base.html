@@ -90,10 +90,11 @@
 
 <div class="media-test"></div>
 
+{% block announcement %}
 <div id="announcements">
   {% call announcement_bar('geoip-suggestion', 'warning', close_memory="remember", close_type="remove") %}{% endcall %}
 
-  {% for announ in get_announcements(request) %}
+  {% for announ in get_announcements(request, product_slug) %}
       {% call announcement_bar(announ.id, 'warning') %}
           {{ announ.content | wiki_to_html }}
       {% endcall %}
@@ -104,6 +105,7 @@
       {% endcall %}
   {% endif %}
 </div>
+{% endblock %}]
 
 <header class="mzp-c-navigation sumo-nav">
   <div class="mzp-c-navigation-l-content">

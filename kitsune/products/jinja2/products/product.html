@@ -14,6 +14,23 @@
 
 {% block base_container_classes %}container_wide{% endblock %}
 
+{% block announcement %}
+<div id="announcements">
+  {% call announcement_bar('geoip-suggestion', 'warning', close_memory="remember", close_type="remove") %}{% endcall %}
+
+  {% for announ in get_announcements(request, product.slug) %}
+      {% call announcement_bar(announ.id, 'warning') %}
+          {{ announ.content | wiki_to_html }}
+      {% endcall %}
+  {% endfor %}
+  {% if settings.READ_ONLY %}
+      {% call announcement_bar('read-only', 'warning') %}
+          {% include "includes/readonly_annoucement.html" %}
+      {% endcall %}
+  {% endif %}
+</div>
+{% endblock %}
+
 {% block hidden_search_masthead %}{% endblock %}
 
 {% block masthead %}
