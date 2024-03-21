@@ -108,7 +108,5 @@ RUN apt-get update && \
 
 RUN mkdir /app/media && chown kitsune:kitsune /app/media
 
-USER kitsune
-
 ARG GIT_SHA=head
 ENV GIT_SHA ${GIT_SHA}
