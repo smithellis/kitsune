@@ -14,6 +14,7 @@ ENV LANG=C.UTF-8 \
     PIP_VERSION=23.2.1
 
 RUN useradd -d /app -M --uid 1000 --shell /bin/bash kitsune
+RUN delgroup npm
 
 RUN set -xe \
     && apt-get update && apt-get install apt-transport-https \
