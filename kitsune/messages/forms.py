@@ -15,6 +15,7 @@ class MessageForm(forms.Form):
     )
     message = forms.CharField(label=_lazy("Message:"), max_length=10000, widget=forms.Textarea)
     in_reply_to = forms.IntegerField(widget=forms.HiddenInput, required=False)
+    object_data = forms.CharField(widget=forms.HiddenInput, required=False)
 
     def __init__(self, *args, **kwargs):
         # Grab the user

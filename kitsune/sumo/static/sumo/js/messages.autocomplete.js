@@ -68,6 +68,22 @@ import { safeString, safeInterpolate } from "sumo/js/main";
           return safeInterpolate('<li class="%(type)s"><img src="%(type_icon)s" alt="icon for %(type)s"><img src="%(avatar)s"/><div class="name_search">%(display_name)s [%(name)s]</div></li>', item, true);
         }
         return safeInterpolate('<li class="%(type)s"><img src="%(type_icon)s" alt="icon for %(type)s"><img src="%(avatar)s"/><div class="name_search">%(name)s</div></li>', item, true);
+      },
+      onAdd: function (item) {
+        var currentData = $('#id_object_data').val();
+        var addedData = '('+item['name']+','+item['type']+')';
+        var newData = currentData ? currentData + addedData : addedData;
+        $('#id_object_data').val(newData);
+        $(this).closest('.single').closest('form').submit();
+      },
+      onDelete: function(item) {
+        // Logic to remove the item's additional data from the hidden field if necessary
+        var currentData = $('#id_object_data').val().split(',');
+        var indexToRemove = currentData.indexOf('('+item['name']+','+item['type']+')');
+        if (indexToRemove > -1) {
+          currentData.splice(indexToRemove, 1);
+        }
+        $('#id_object_data').val(currentData.join(','));
       }
     });
   });

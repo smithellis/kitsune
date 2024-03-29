@@ -97,22 +97,16 @@ class MultiUsernameOrGroupnameField(forms.Field):
 
         users_and_groups = []
         for user_or_group in value.split(","):
-            if ":" in user_or_group:
-                _type, name = user_or_group.split(":")
-                name = name.strip()
-            else:
-                name = user_or_group.strip()
-            msg = ""
-            if name:
+            name = user_or_group.strip()
+            try:
+                user = User.objects.get(username=name)
+                users_and_groups.append(user)
+            except User.DoesNotExist:
                 try:
-                    user = User.objects.get(username=name)
-                    users_and_groups.append(user)
-                except User.DoesNotExist:
-                    try:
-                        group = Group.objects.get(name=name)
-                        users_and_groups.append(group)
-                    except Group.DoesNotExist:
-                        msg = _("{name} is not a valid username or group name.")
+                    group = Group.objects.get(name=name)
+                    users_and_groups.append(group)
+                except Group.DoesNotExist:
+                    msg = _("{name} is not a valid username or group name.")
             if msg:
                 raise forms.ValidationError(msg.format(name=name))
         return users_and_groups

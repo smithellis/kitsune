@@ -74,6 +74,10 @@ def new_message(request):
     to = request.GET.get("to")
     recipients = []
 
+    # This is for a GET request with TO prepopulated
+    # Since To won't be objects, but will instead
+    # be a string, we need to check if it's a valid
+    # user or group name
     if to:
         for name in to.split(","):
             try:
