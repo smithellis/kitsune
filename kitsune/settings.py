@@ -508,6 +508,7 @@ MIDDLEWARE: tuple[str, ...] = (
     "kitsune.users.middleware.LogoutInvalidatedSessionsMiddleware",
     "csp.middleware.CSPMiddleware",
     "dockerflow.django.middleware.DockerflowMiddleware",
+    "wagtail.contrib.redirects.middleware.RedirectMiddleware",
 )
 
 # SecurityMiddleware settings
@@ -635,6 +636,18 @@ INSTALLED_APPS: tuple[str, ...] = (
     "django.contrib.sites",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "wagtail.contrib.forms",
+    "wagtail.contrib.redirects",
+    "wagtail.embeds",
+    "wagtail.sites",
+    "wagtail.users",
+    "wagtail.snippets",
+    "wagtail.documents",
+    "wagtail.images",
+    "wagtail.search",
+    "wagtail.admin",
+    "wagtail",
+    "modelcluster",
     "graphene_django",
     "mozilla_django_oidc",
     "corsheaders",
@@ -1286,3 +1299,10 @@ MOZILLA_ACCOUNT_ARTICLES = [
     "accounts-blocked",
     "im-having-problems-confirming-my-firefox-account",
 ]
+
+# Wagtail settings
+WAGTAIL_I18N_ENABLED = True
+WAGTAIL_CONTENT_LANGUAGES = LANGUAGES
+WAGTAIL_SITE_NAME = config("WAGTAIL_SITE_NAME", default="Mozilla Support CMS")
+WAGTAILADMIN_BASE_URL = config("WAGTAILADMIN_BASE_URL", default="")
+WAGTAILIMAGES_MAX_UPLOAD_SIZE = IMAGE_MAX_FILESIZE
