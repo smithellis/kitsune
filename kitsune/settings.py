@@ -647,6 +647,8 @@ INSTALLED_APPS: tuple[str, ...] = (
     "wagtail.search",
     "wagtail.admin",
     "wagtail",
+    "wagtail_localize",
+    "wagtail_localize.locales",
     "modelcluster",
     "graphene_django",
     "mozilla_django_oidc",
