@@ -446,6 +446,10 @@ TEMPLATES = [
                 "django_jinja.builtins.extensions.StaticFilesExtension",
                 "django_jinja.builtins.extensions.DjangoFiltersExtension",
                 "jinja2.ext.i18n",
+                "wagtail.jinja2tags.core",
+                "wagtail.admin.jinja2tags.userbar",
+                "wagtail.images.jinja2tags.images",
+                "wagtail.contrib.settings.jinja2tags.settings",
             ],
             "policies": {
                 "ext.i18n.trimmed": True,
@@ -458,7 +462,8 @@ TEMPLATES = [
         "APP_DIRS": True,
         "OPTIONS": {
             "debug": DEBUG,
-            "context_processors": _CONTEXT_PROCESSORS,
+            "context_processors": _CONTEXT_PROCESSORS
+            + ["wagtail.contrib.settings.context_processors.settings"],
         },
     },
 ]
