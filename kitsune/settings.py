@@ -552,9 +552,11 @@ if READ_ONLY:
     AUTHENTICATION_BACKENDS = ("kitsune.sumo.readonlyauth.ReadOnlyBackend",)
     OIDC_ENABLE = False
     ENABLE_ADMIN = False
+    WAGTAIL_ENABLE_ADMIN = False
 else:
     OIDC_ENABLE = config("OIDC_ENABLE", default=True, cast=bool)
     ENABLE_ADMIN = config("ENABLE_ADMIN", default=OIDC_ENABLE, cast=bool)
+    WAGTAIL_ENABLE_ADMIN = config("WAGTAIL_ENABLE_ADMIN", default=OIDC_ENABLE, cast=bool)
 
     # Username algo for the oidc lib
     def _username_algo(email):
@@ -641,20 +643,6 @@ INSTALLED_APPS: tuple[str, ...] = (
     "django.contrib.sites",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "wagtail.contrib.forms",
-    "wagtail.contrib.redirects",
-    "wagtail.embeds",
-    "wagtail.sites",
-    "wagtail.users",
-    "wagtail.snippets",
-    "wagtail.documents",
-    "wagtail.images",
-    "wagtail.search",
-    "wagtail.admin",
-    "wagtail",
-    "wagtail_localize",
-    "wagtail_localize.locales",
-    "modelcluster",
     "graphene_django",
     "mozilla_django_oidc",
     "corsheaders",
@@ -693,6 +681,20 @@ INSTALLED_APPS: tuple[str, ...] = (
     "kitsune.notifications",
     "kitsune.journal",
     "kitsune.tidings",
+    "wagtail.contrib.forms",
+    "wagtail.contrib.redirects",
+    "wagtail.embeds",
+    "wagtail.sites",
+    "wagtail.users",
+    "wagtail.snippets",
+    "wagtail.documents",
+    "wagtail.images",
+    "wagtail.search",
+    "wagtail.admin",
+    "wagtail",
+    "wagtail_localize",
+    "wagtail_localize.locales",
+    "modelcluster",
     "rest_framework",
     "statici18n",
     "watchman",
@@ -1310,9 +1312,7 @@ MOZILLA_ACCOUNT_ARTICLES = [
 # Wagtail settings
 WAGTAIL_I18N_ENABLED = True
 WAGTAIL_CONTENT_LANGUAGES = LANGUAGES
+WAGTAILADMIN_PERMITTED_LANGUAGES = LANGUAGES
 WAGTAIL_SITE_NAME = config("WAGTAIL_SITE_NAME", default="Mozilla Support CMS")
 WAGTAILADMIN_BASE_URL = config("WAGTAILADMIN_BASE_URL", default="")
 WAGTAILIMAGES_MAX_UPLOAD_SIZE = IMAGE_MAX_FILESIZE
-
-# Kitsune Wagtail-related settings
-WAGTAIL_ENABLE_ADMIN = config("WAGTAIL_ENABLE_ADMIN", default=True, cast=bool)

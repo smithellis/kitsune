@@ -48,6 +48,7 @@ if settings.OIDC_ENABLE:
     urlpatterns.append(path("", include("kitsune.users.urls_oidc")))
 
 if settings.WAGTAIL_ENABLE_ADMIN:
+    urlpatterns.append(path("cms/login/", sumo_views.cms_login, name="wagtailadmin_login"))
     urlpatterns.append(path("cms/", include("wagtail.admin.urls")))
 
 urlpatterns += [
