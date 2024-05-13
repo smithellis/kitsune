@@ -7,6 +7,19 @@ from kitsune.sumo.models import ModelBase
 from kitsune.sumo.urlresolvers import reverse
 from kitsune.sumo.utils import webpack_static
 
+
+from wagtail.models import Page
+from wagtail.fields import StreamField
+from wagtail import blocks
+from wagtail.images.blocks import ImageChooserBlock
+
+# from modelcluster.fields import ParentalKey
+
+# from wagtail.models import Page, Orderable
+# from wagtail.fields import RichTextField
+from wagtail.admin.panels import FieldPanel
+from wagtail.search import index
+
 HOT_TOPIC_SLUG = "hot"
 
 
@@ -193,3 +206,36 @@ class Platform(ModelBase):
 
     def __str__(self):
         return "%s" % self.name
+
+
+class ProductBlock(blocks.StructBlock):
+    logo = ImageChooserBlock(required=False)
+    title = blocks.CharBlock()
+    description = blocks.CharBlock()
+    slug = blocks.CharBlock()
+
+    class Meta:
+        template = "products/blocks/product_block.html"
+
+
+class ProductListing(Page):
+    # Database fields
+
+    body = StreamField(
+        [
+            ("heading", blocks.CharBlock()),
+            ("product", ProductBlock()),
+        ]
+    )
+
+    # Search index configuration
+
+    search_fields = Page.search_fields + [
+        index.SearchField("body"),
+    ]
+
+    # Editor panels configuration
+
+    content_panels = Page.content_panels + [
+        FieldPanel("body"),
+    ]

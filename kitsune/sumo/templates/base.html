@@ -1,0 +1,55 @@
+{% load static i18n %}
+{% load sumo_tags %}
+{% load custom_filters %}
+
+<!DOCTYPE html>
+<html class="no-js" lang="{{ request.LANGUAGE_CODE }}"
+  {% if DIR %}dir="{{ DIR }}"{% endif %}
+  {% if settings.GTM_CONTAINER_ID %}data-gtm-container-id="{{ settings.GTM_CONTAINER_ID }}"{% endif %}
+  {% if ga_content_group %}data-ga-content-group="{{ ga_content_group }}"{% endif %}
+  {% if ga_default_slug %}data-ga-default-slug="{{ ga_default_slug }}"{% endif %}
+  {% if ga_products %}data-ga-products="{{ ga_products }}"{% endif %}
+  {% if ga_topics %}data-ga-topics="{{ ga_topics }}"{% endif %}>
+<head>
+  {% include "includes/google-analytics.html" %}
+
+  {% block head_top %}{% endblock %}
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+
+  {% block head_title %}
+    <title>{% block title %}{% if title %}{{ title }} | {% endif %}{% trans 'Mozilla Support' %}{% endblock %}</title>
+  {% endblock %}
+
+  <!-- Custom template tag might be needed for favicon() -->
+
+
+  <link rel="search" type="application/opensearchdescription+xml" title="{% trans 'Mozilla Support' %}" href="{% url 'search.plugin' %}"/>
+  {% if feeds %}
+    {% for feed in feeds %}
+      <link rel="alternate" type="application/atom+xml" href="{{ feed.0 }}" title="{{ feed.1 }}"/>
+    {% endfor %}
+  {% endif %}
+
+  {% include "entrypoints/screen.html" %}
+  {% include "entrypoints/common.html" %}
+{% for script in scripts %}
+  {% include_script script %}
+{% endfor %}
+
+  {% include "entrypoints/common.fx.download.html" %}
+
+  {% if meta %}
+    {% for tag in meta %}
+      <meta name="{{ tag.0 }}" content="{{ tag.1 }}"/>
+    {% endfor %}
+  {% endif %}
+</head>
+
+<body class="html-{{ DIR }} logged-{% if user.is_authenticated %}in{% else %}out{% endif %} responsive {{ classes }} {{ request.LANGUAGE_CODE }}"
+      data-readonly="{{ settings.READ_ONLY|json }}"
+      data-usernames-api="{% url 'users.api.usernames' %}"
+      data-messages-api="{% url 'messages.api.get_autocomplete_suggestions' %}"
+      data-media-url="{{ MEDIA_URL }}">
+<!-- Additional content can follow with Django template conventions -->
+</body>
+</html>

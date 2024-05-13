@@ -1,0 +1,21 @@
+{% load wagtailcore_tags %}
+<div class="sumo-card-grid is-product-wrap">
+  <div class="scroll-wrap">
+      <div class="card card--product zoom-on-hover">   
+          <div class="card--details">
+            <h3 class="card--title">
+              <a class="expand-this-link" href=""
+                 data-event-name="link_click"
+                 data-event-parameters='{
+                   "link_name": "product-home",
+                   "link_detail": "{{ product.slug }}"
+                 }'>
+                {{ value.title }}
+              </a>
+            </h3>
+            <p class="card--desc">{{ value.description }}</p>
+            <p>TEST</p>
+          </div>
+      </div>
+  </div>
+</div>

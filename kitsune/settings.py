@@ -9,6 +9,7 @@ import re
 import dj_database_url
 import django_cache_url
 from decouple import Csv, config
+from jinja2 import Undefined
 
 from kitsune.lib.sumo_locales import LOCALES
 
@@ -438,7 +439,7 @@ TEMPLATES = [
             "match_extension": "",
             "newstyle_gettext": True,
             "context_processors": _CONTEXT_PROCESSORS,
-            "undefined": "jinja2.Undefined",
+            "undefined": Undefined,
             "extensions": [
                 "waffle.jinja.WaffleExtension",
                 "jinja2.ext.do",
