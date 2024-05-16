@@ -17,8 +17,16 @@
 
 {% block contentwrap %}
   <section class="mzp-l-content sumo-page-section" id="main-content">
-{{ page.body }}
+    <div class="sumo-card-grid is-product-wrap">
+      <div class="scroll-wrap">
+        {% for block in page.body %}
+            {% if block.block_type == 'product_block' %}
+              {% for product in block.value %}
+                {{ product }}
+              {% endfor %}
+            {% endif %}
+        {% endfor %}
+      </div>
+    </div>
   </section>
 {% endblock %}
-
-
