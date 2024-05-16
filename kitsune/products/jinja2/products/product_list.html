@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block hidden_search_masthead %}{% endblock %}
+
+{% block masthead %}
+<section class="home-search-section sumo-page-section shade-bg" id="products-and-services" >
+  <div class="mzp-l-content">
+
+  </div>
+  <div class="mzp-l-content narrow">
+    <div class="home-search-section--content">
+      <h1 class="sumo-page-heading-xl">{{ page.title }}</h1>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+
+{% block contentwrap %}
+  <section class="mzp-l-content sumo-page-section" id="main-content">
+{{ page.body }}
+  </section>
+{% endblock %}
+
+

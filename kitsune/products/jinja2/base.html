@@ -1,0 +1,385 @@
+{% from 'includes/common_macros.html' import announcement_bar, search_box, aux_nav, profile_nav, download_firefox, field, checkbox, favicon with context %}
+
+{% if request.LANGUAGE_CODE == 'xx' %}
+  {% set meta = [('robots', 'noindex')] %}
+{% endif %}
+<!DOCTYPE html>
+<html class="no-js" lang="{{ request.LANGUAGE_CODE }}"
+  {% if DIR %}dir="{{ DIR }}"{% endif %}
+  {% if settings.GTM_CONTAINER_ID %}data-gtm-container-id="{{ settings.GTM_CONTAINER_ID }}"{% endif %}
+  {% if ga_content_group %}data-ga-content-group="{{ ga_content_group }}"{% endif %}
+  {% if ga_default_slug %}data-ga-default-slug="{{ ga_default_slug }}"{% endif %}
+  {% if ga_topics %}data-ga-topics="{{ ga_topics }}"{% endif %}
+  {% if ga_products %}data-ga-products="{{ ga_products }}"{% endif %}>
+<head>
+  {% include "includes/google-analytics.html" %}
+
+  {% block head_top %}{% endblock %}
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+
+  {% block head_title %}
+    <title>{% block title %}{% if title %}{{ title }} | {% endif %}{{ pgettext('site_title', 'Mozilla Support') }}{% endblock %}</title>
+  {% endblock %}
+
+  {{ favicon() }}
+
+  <link rel="search" type="application/opensearchdescription+xml" title="{{ _('Mozilla Support') }}" href="{{ url('search.plugin') }}"/>
+  {% if feeds %}
+    {% for feed in feeds %}
+      <link rel="alternate" type="application/atom+xml" href="{{ feed[0] }}" title="{{ feed[1] }}"/>
+    {% endfor %}
+  {% endif %}
+
+  {# include css from webpack #}
+  {# this html file won't be found in the source tree, as it's output by webpack #}
+  {% include "entrypoints/screen.html" %}
+
+  {# include javascript from webpack #}
+  {# these html files won't be found in the source tree, as they're output by webpack #}
+  {% include "entrypoints/common.html" %}
+  {% for script in scripts %}
+    {% include "entrypoints/" + script + ".html" %}
+  {% endfor %}
+  {% include "entrypoints/common.fx.download.html" %}
+
+  {% if meta %}
+    {% for tag in meta %}
+      <meta name="{{ tag[0] }}" content="{{ tag[1] }}"/>
+    {% endfor %}
+  {% endif %}
+
+  {# This is to verify "we" own the site for some feature on youtube. See bug 992412. #}
+  <meta name="google-site-verification" content="2URA-2Y9BeYYUf8B2BSsBSVetJJS3TZwlXBOaMx2VfY" />
+  {# Bug 1385387 #}
+  <meta name="google-site-verification" content="ueNbCgS4e1JIAgLGwufm-jHaIcLXFLtFMmR_65S1Ag0" />
+  {# This is to verify "we" own the site for purposes of Bing/Yahoo search engine features. Bug 1149611 #}
+  <meta name="msvalidate.01" content="1659173DC94819093068B0ED7C51C527" />
+
+  {% if refresh %}
+    <meta http-equiv="refresh" content="{{ refresh[1] }};url={{ refresh[0] }}"/>
+  {% endif %}
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+  {% if canonical_url %}
+    <link rel="canonical" href="{{ canonical_url|safe }}" />
+  {% endif %}
+</head>
+
+<body class="html-{{ DIR }} logged-{% if user.is_authenticated %}in{% else %}out{% endif %} responsive {{ classes }} {{ request.LANGUAGE_CODE }}"
+      data-readonly="{{ settings.READ_ONLY|json }}"
+      data-usernames-api="{{ url('users.api.usernames') }}"
+      data-messages-api="{{ url('messages.api.get_autocomplete_suggestions') }}"
+      data-media-url="{{ MEDIA_URL }}"
+      {% if ga_alternate_url %}
+        data-ga-alternate-url="{{ ga_alternate_url }}"
+      {% endif %}
+{% if extra_body_attrs -%}
+  {% for attr, val in extra_body_attrs.items() %}{{ attr }}="{{ val }}" {% endfor %}
+{%- endif %}>
+
+{% set locale_picker_url = url('sumo.locales') %}
+{% if localizable_url %}
+  {% set locale_picker_url = locale_picker_url|urlparams(next=localizable_url) %}
+{% endif %}
+<ul class="sumo-nav-access" id="nav-access">
+  <li><a href="#main-content">{{ _('Skip to main content') }}</a></li>
+  <li><a href="{{ locale_picker_url }}">{{ _('Switch language') }}</a></li>
+  <li><a id="skip-to-search" href="#search-q">{{ _('Skip to search') }}</a></li>
+</ul>
+
+{% if settings.STAGE %}
+<div id="stage-banner"  class="mzp-c-notification-bar mzp-t-warning">
+  <button class="mzp-c-notification-bar-button close-button" type="button"></button>
+  <p>{{ _('This is a staging site, the content gets overwritten on the 1st of every month.<br>The production site is <a href="https://support.mozilla.org">here</a>.') }}</p>
+</div>
+{% endif %}
+
+<div class="media-test"></div>
+
+<div id="announcements">
+  {% call announcement_bar('geoip-suggestion', 'warning', close_memory="remember", close_type="remove") %}{% endcall %}
+
+  {% for announ in get_announcements(request) %}
+      {% call announcement_bar(announ.id, 'warning') %}
+          {{ announ.content | wiki_to_html }}
+      {% endcall %}
+  {% endfor %}
+  {% if settings.READ_ONLY %}
+      {% call announcement_bar('read-only', 'warning') %}
+          {% include "includes/readonly_annoucement.html" %}
+      {% endcall %}
+  {% endif %}
+</div>
+
+{% block product_announcement %}
+{% endblock %}
+
+<header class="mzp-c-navigation sumo-nav">
+  <div class="mzp-c-navigation-l-content">
+    <div class="sumo-nav--container">
+      <div class="sumo-nav--logo">
+        <a href="{{ url('home') }}"><img src="{{ webpack_static('sumo/img/mozilla-support.svg') }}" alt="Mozilla Support Logo"/></a>
+      </div>
+
+      <button data-mobile-nav-search-button class="sumo-nav--search-button" type="button">Search</button>
+      <button data-sumo-toggle-nav="#main-navigation" class="sumo-nav--toggle-button" type="button" aria-controls="main-navigation">Menu</button>
+      <a class="sumo-nav--avatar-button" data-sumo-toggle-nav="#profile-navigation" aria-controls="profile-navigation" aria-role="button">
+        {% if user.is_authenticated %}
+        <img class="avatar" src="{{ profile_avatar(user) }}" alt="Avatar for Username">
+        {% else %}
+        <img class="avatar" src="{{ webpack_static('sumo/img/default-FFA-avatar.png') }}" alt="Avatar for Username">
+        {% endif %}
+
+      </a>
+      <div class="mzp-c-navigation-items sumo-nav--list-wrap" id="main-navigation">
+        <div class="mzp-c-navigation-menu">
+          <nav class="mzp-c-menu mzp-is-basic">
+              {% if not hide_aux_nav %}
+              <ul class="mzp-c-menu-category-list sumo-nav--list">
+                {{ aux_nav(user, hide_aaq_link) }}
+              </ul>
+              {% endif %}
+          </nav>
+        </div>
+      </div>
+
+      <div class="mzp-c-navigation-items sumo-nav--list-wrap-right {% if not user.is_authenticated %}logged-out{% endif %}" id="profile-navigation">
+        <div class="mzp-c-navigation-menu">
+          <nav class="mzp-c-menu mzp-is-basic">
+              {% if not hide_aux_nav %}
+              <ul class="mzp-c-menu-category-list sumo-nav--list">
+                {{ profile_nav(user, hide_aaq_link) }}
+              </ul>
+              {% endif %}
+          </nav>
+        </div>
+      </div>
+      <div class="mzp-c-navigation-items sumo-nav--mobile-search-form" id="search-navigation">
+        <div class="mzp-c-navigation-menu">
+          <nav class="mzp-c-menu mzp-is-basic">
+            {{ search_box(settings, id='mobile-search-results', params=search_params) }}
+          </nav>
+        </div>
+      </div>
+    </div>
+  </div>
+</header><!--/.mzp-c-navigation -->
+
+{% block hidden_search_masthead %}
+<!-- This is only displayed when the instant search is active.
+     This block is overriden in home.html and product.html,
+     and can likely be removed when frontend search is replaced. -->
+<div class="home-search-section sumo-page-section--lg shade-bg hidden-search-masthead">
+  <div class="mzp-l-content narrow">
+    <div class="home-search-section--content">
+      <h4 class="sumo-page-heading-xl">{{ _('Search Support') }}</h4>
+      {{ search_box(settings, id='hidden-search', params=search_params) }}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block masthead %}
+{% endblock %}
+
+{% if messages %}
+  <ul class="user-messages">
+    {% for message in messages %}
+      {% if not message.message.startswith('fxa_notification') %}
+      <li class="mzp-c-notification-bar {% if message.level_tag %}mzp-t-{{ message.level_tag }}{% endif %}">
+        <button class="mzp-c-notification-bar-button" type="button"></button>
+        {% if "safe" in message.tags %}
+          <p>{{ message|safe }}</p>
+        {% else %}
+          <p>{{ message }}</p>
+        {% endif %}
+      </li>
+      {% endif %}
+    {% endfor %}
+  </ul>
+{% endif %}
+
+{% block contentwrap %}
+<div class="mzp-l-content {% block base_container_classes %}{% endblock %}" id="main-content">
+  <div class="sumo-page-section--inner">
+    {% block breadcrumbs %}
+      {{ breadcrumbs(crumbs, id='main-breadcrumbs') }}
+    {% endblock %}
+    <div class="sumo-l-two-col {% block columns_modifier %}{% endblock %}">
+      {% block outer_side %}
+      <aside id="aside" class="sumo-l-two-col--sidebar">
+        {% block side_top %}{% endblock %}
+        {% block side %}{% endblock %}
+        {% block side_bottom %}{% endblock %}
+      </aside>
+      {% endblock %}
+      <main role="main" class="sumo-l-two-col--main">
+      {% block above_main %}{% endblock %}
+      {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+  {% block below_main %}{% endblock %}
+</div>
+{% endblock %}
+
+<footer class="mzp-c-footer">
+  <div class="mzp-l-content">
+    <nav class="mzp-c-footer-primary">
+      <div class="mzp-c-footer-cols">
+        <section class="mzp-c-footer-col">
+          <h5 class="mzp-c-footer-heading">{{ _('Mozilla') }}</h5>
+          <ul class="mzp-c-footer-list">
+            <li><a href="https://www.mozilla.org/en-US/about/legal/fraud-report/">{{ _('Report Trademark Abuse') }}</a></li>
+            <li><a href="https://github.com/mozilla/kitsune/">{{ _('Source code') }}</a></li>
+            <li><a href="https://twitter.com/firefox">{{ _('Twitter') }}</a></li>
+            <li>
+              <a href="{{ url('landings.contribute') }}"
+                data-event-name="link_click"
+                data-event-parameters='{"link_name": "footer.join-our-community.contribute-home"}'>
+                {{ _('Join our Community') }}
+              </a>
+            </li>
+            <li>
+              <a href="{{ url('home') }}"
+                data-event-name="link_click"
+                data-event-parameters='{"link_name": "footer.explore-help-articles.home"}'>
+                {{ _('Explore Help Articles')}}
+              </a>
+            </li>
+          </ul>
+        </section>
+
+        <section class="mzp-c-footer-col">
+          <h5 class="mzp-c-footer-heading">{{ _('Firefox') }}</h5>
+          <ul class="mzp-c-footer-list">
+            <li><a href="https://www.mozilla.org/firefox/new/?utm_source=support.mozilla.org&utm_campaign=footer&utm_medium=referral">{{ _('Download') }}</a></li>
+            <li><a href="https://www.mozilla.org/firefox/new/?utm_source=support.mozilla.org&utm_campaign=footer&utm_medium=referral">{{ _('Firefox Desktop') }}</a></li>
+            <li><a href="https://www.mozilla.org/firefox/mobile/?utm_source=support.mozilla.org&utm_campaign=footer&utm_medium=referral">{{ _('Android Browser') }}</a></li>
+            <li><a href="https://www.mozilla.org/firefox/mobile/?utm_source=support.mozilla.org&utm_campaign=footer&utm_medium=referral">{{ _('iOS Browser') }}</a></li>
+            <li><a href="https://www.mozilla.org/firefox/mobile/?utm_source=support.mozilla.org&utm_campaign=footer&utm_medium=referral">{{ _('Focus Browser') }}</a></li>
+          </ul>
+        </section>
+
+        <section class="mzp-c-footer-col">
+          <h5 class="mzp-c-footer-heading">{{ _('Firefox for Developers') }}</h5>
+          <ul class="mzp-c-footer-list">
+            <li><a href="https://www.mozilla.org/en-US/firefox/developer/?utm_source=support.mozilla.org&utm_campaign=footer&utm_medium=referral">{{ _('Developer Edition') }}</a></li>
+            <li><a href="https://www.mozilla.org/en-US/firefox/channel/desktop/?utm_source=support.mozilla.org&utm_campaign=footer&utm_medium=referral#beta">{{ _('Beta') }}</a></li>
+            <li><a href="https://www.mozilla.org/en-US/firefox/channel/android/?utm_source=support.mozilla.org&utm_campaign=footer&utm_medium=referral#beta">{{ _('Beta for Android') }}</a></li>
+            <li><a href="https://www.mozilla.org/en-US/firefox/channel/desktop/?utm_source=support.mozilla.org&utm_campaign=footer&utm_medium=referral#nightly">{{ _('Nightly') }}</a></li>
+            <li><a href="https://www.mozilla.org/en-US/firefox/channel/android/?utm_source=support.mozilla.org&utm_campaign=footer&utm_medium=referral#nightly">{{ _('Nightly for Android') }}</a></li>
+          </ul>
+        </section>
+
+        <section class="mzp-c-footer-col">
+          <h5 class="mzp-c-footer-heading">{{ _('Mozilla Account') }}</h5>
+          <ul class="mzp-c-footer-list">
+            {% if not request.user.is_authenticated %}
+              <li><a rel="nofollow" href="{{ url('users.auth') }}">{{ _('Sign In/Up') }}</a></li>
+            {% endif %}
+            <li>
+              <a href="{{ url('wiki.document', 'access-mozilla-services-firefox-account') }}"
+                data-event-name="link_click"
+                data-event-parameters='{"link_name": "footer.what-is-it.kb-article"}'>
+                {{ _('What Is It?') }}
+              </a>
+            </li>
+            <li><a href="https://accounts.firefox.com/reset_password">{{ _('Reset Password') }}</a></li>
+            <li>
+              <a href="{{ url('wiki.document', 'switching-devices') }}"
+                data-event-name="link_click"
+                data-event-parameters='{"link_name": "footer.sync-your-data.kb-article"}'>
+                {{ _('Sync Your Data') }}
+              </a>
+            </li>
+            <li>
+              <a href="{{ url('products.product', 'mozilla-account') }}"
+                data-event-name="link_click"
+                data-event-parameters='{
+                  "link_name": "footer.get-help.product-home",
+                  "link_detail": "mozilla-account"
+                }'>
+                {{ _('Get Help') }}
+              </a>
+            </li>
+          </ul>
+        </section>
+
+        <section class="mzp-c-footer-col lang-col">
+          <form class="mzp-c-language-switcher" method="get" action="#">
+            <a class="mzp-c-language-switcher-link" href="https://www.mozilla.org/locales/">{{ _('Language') }}</a>
+            <label for="mzp-c-language-switcher-select">{{ _('Language') }}</label>
+            <select id="mzp-c-language-switcher-select" class="mzp-js-language-switcher-select"
+             name="lang">
+              {% for locale in settings.LANGUAGE_CHOICES %}
+                  <option value="{{ locale[0] }}" {% if locale[0] == request.LANGUAGE_CODE %}selected{% endif %}>{{ locale[1] }}</option>
+              {% endfor %}
+            </select>
+            <!-- form submit button is shown when JavaScript is not enabled -->
+            <button type="submit">{{ _('Go') }}</button>
+          </form>
+          <ul class="mzp-c-footer-links-social">
+            <li><a class="twitter" href="https://twitter.com/firefox">Twitter<span>(@firefox)</span></a></li>
+            <li><a class="youtube" href="https://www.youtube.com/firefoxchannel">YouTube<span> (firefoxchannel)</span></a></li>
+            <li><a class="instagram" href="https://www.instagram.com/firefox">Instagram<span> (firefox)</span></a></li>
+          </ul>
+        </section>
+
+      </div>
+    </nav>
+
+    <nav class="mzp-c-footer-secondary">
+      <div class="mzp-c-footer-link-col">
+        <div class="mzp-c-footer-primary-logo"><a href="https://www.mozilla.org/">{{ _('Mozilla') }}</a></div>
+        <div class="mzp-c-footer-legal">
+          <ul>
+            <li><a href="https://www.mozilla.org/">{{ _('mozilla.org') }}</a></li>
+            <li><a href="https://www.mozilla.org/about/legal/terms/mozilla/">{{ _('Terms of Service') }}</a></li>
+            <li><a href="https://www.mozilla.org/privacy/websites/">{{ _('Privacy') }}</a></li>
+            <li><a href="https://www.mozilla.org/privacy/websites/#cookies">{{ _('Cookies') }}</a></li>
+            <li><a href="https://www.mozilla.org/en-US/contact/">{{ _('Contact') }}</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="mzp-c-footer-legal-col">
+        <p>
+          {% trans
+            moco_link_open='<a href="https://www.mozilla.org" rel="external noopener" data-link-type="footer" data-link-name="Mozilla Corporation">'|safe,
+            mofo_link_open='<a href="https://foundation.mozilla.org" rel="external noopener" data-link-type="footer" data-link-name="Mozilla Foundation">'|safe,
+            link_close='</a>'|safe
+          %}
+            Visit {{ moco_link_open }}Mozilla Corporation’s{{ link_close }}
+            not-for-profit parent, the {{ mofo_link_open }}Mozilla Foundation{{ link_close }}.
+          {% endtrans %}
+        </p>
+        <p>
+          {% trans
+            year=CURRENT_YEAR,
+            link_open='<a rel="external noopener" href="https://www.mozilla.org/foundation/licensing/website-content/">'|safe,
+            link_close='</a>'|safe
+          %}
+            Portions of this content are ©1998–{{ year }} by individual mozilla.org contributors. Content available under a
+            {{ link_open }}Creative Commons license{{ link_close }}.
+          {% endtrans %}
+        </p>
+      </div>
+    </nav>
+  </div>
+</footer>
+{% if request.LANGUAGE_CODE %}
+  {% if settings.DEV or settings.TEST %}
+    <script src="{{ static('jsi18n/{lang}/djangojs.js'|f(lang=request.LANGUAGE_CODE|lower)) }}"></script>
+  {% else %}
+    <script src="{{ static('jsi18n/{lang}/djangojs-min.js'|f(lang=request.LANGUAGE_CODE|lower)) }}"></script>
+  {% endif %}
+{% endif %}
+
+{# Temporary Pontoon testing - bug 812176 #}
+{% if settings.STAGE %}
+  <script src="https://pontoon.mozilla.org/pontoon.js"></script>
+{% endif %}
+
+</body>
+</html>

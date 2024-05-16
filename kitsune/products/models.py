@@ -1,11 +1,20 @@
 from django.conf import settings
 from django.db import models
+
 from django.utils.translation import gettext_lazy as _lazy
 
 from kitsune.sumo.fields import ImagePlusField
 from kitsune.sumo.models import ModelBase
 from kitsune.sumo.urlresolvers import reverse
 from kitsune.sumo.utils import webpack_static
+
+from wagtail import blocks
+from wagtail.images.blocks import ImageChooserBlock
+from wagtail.models import Page
+from wagtail.fields import StreamField
+
+# import MultiFieldPanel:
+from wagtail.admin.panels import FieldPanel
 
 HOT_TOPIC_SLUG = "hot"
 
@@ -193,3 +202,40 @@ class Platform(ModelBase):
 
     def __str__(self):
         return "%s" % self.name
+
+
+class ProductBlock(blocks.StructBlock):
+    name = blocks.CharBlock()
+    slug = blocks.CharBlock()
+    blurb = blocks.TextBlock()
+    icon = ImageChooserBlock(required=False)
+
+    class Meta:
+        template = "blocks/product_block.html"
+
+
+class FeaturedArticleBlock(blocks.StructBlock):
+    title = blocks.CharBlock()
+    description = blocks.TextBlock()
+    link = blocks.URLBlock()
+    image = ImageChooserBlock()
+
+
+class SearchBlock(blocks.StructBlock):
+    title = blocks.CharBlock()
+    placeholder = blocks.CharBlock()
+    button_text = blocks.CharBlock()
+
+
+class ProductList(Page):
+    body = StreamField(
+        [
+            ("search_block", SearchBlock()),
+            ("product_block", blocks.ListBlock(ProductBlock())),
+            ("featured_article_block", blocks.ListBlock(FeaturedArticleBlock())),
+        ]
+    )
+
+    content_panels = Page.content_panels + [
+        FieldPanel("body"),
+    ]

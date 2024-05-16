@@ -1,0 +1,24 @@
+
+<div class="sumo-card-grid is-product-wrap">
+  <div class="scroll-wrap">
+      <div class="card card--product zoom-on-hover"> 
+        {% if self.image %}
+          {{ self.image }}
+        {% endif %}
+          <div class="card--details">
+            <h3 class="card--title">
+              <a class="expand-this-link" href=""
+                 data-event-name="link_click"
+                 data-event-parameters='{
+                   "link_name": "product-home",
+                   "link_detail": "{{ self.slug }}"
+                 }'>
+                {{ self.name }}
+              </a>
+            </h3>
+            <p class="card--desc">{{ self.blurb }}</p>
+            <p>TEST</p>
+          </div>
+      </div>
+  </div>
+</div>

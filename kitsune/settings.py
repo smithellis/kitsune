@@ -420,7 +420,18 @@ _CONTEXT_PROCESSORS = [
     "kitsune.sumo.context_processors.current_year",
     "kitsune.sumo.context_processors.static_url_webpack",
     "kitsune.messages.context_processors.unread_message_count",
+    "wagtail.contrib.settings.context_processors.settings",
 ]
+
+
+# settings.py
+
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Django settings...
 
 TEMPLATES = [
     {
@@ -431,14 +442,23 @@ TEMPLATES = [
         ],
         "APP_DIRS": True,
         "OPTIONS": {
-            # Use jinja2/ for jinja templates
             "app_dirname": "jinja2",
-            # Don't figure out which template loader to use based on
-            # file extension
             "match_extension": "",
-            "newstyle_gettext": True,
-            "context_processors": _CONTEXT_PROCESSORS,
-            "undefined": "jinja2.Undefined",
+            "context_processors": [
+                "django.contrib.auth.context_processors.auth",
+                "django.template.context_processors.debug",
+                "django.template.context_processors.media",
+                "django.template.context_processors.static",
+                "django.template.context_processors.request",
+                "django.contrib.messages.context_processors.messages",
+                "kitsune.sumo.context_processors.global_settings",
+                "kitsune.sumo.context_processors.i18n",
+                "kitsune.sumo.context_processors.aaq_languages",
+                "kitsune.sumo.context_processors.current_year",
+                "kitsune.sumo.context_processors.static_url_webpack",
+                "kitsune.messages.context_processors.unread_message_count",
+                "wagtail.contrib.settings.context_processors.settings",
+            ],
             "extensions": [
                 "waffle.jinja.WaffleExtension",
                 "jinja2.ext.do",
@@ -449,8 +469,9 @@ TEMPLATES = [
                 "wagtail.jinja2tags.core",
                 "wagtail.admin.jinja2tags.userbar",
                 "wagtail.images.jinja2tags.images",
-                "wagtail.contrib.settings.jinja2tags.settings",
             ],
+            "undefined": "jinja2.Undefined",
+            "newstyle_gettext": True,
             "policies": {
                 "ext.i18n.trimmed": True,
             },
@@ -461,9 +482,20 @@ TEMPLATES = [
         "DIRS": [],
         "APP_DIRS": True,
         "OPTIONS": {
-            "debug": DEBUG,
-            "context_processors": _CONTEXT_PROCESSORS
-            + ["wagtail.contrib.settings.context_processors.settings"],
+            "context_processors": [
+                "django.contrib.auth.context_processors.auth",
+                "django.template.context_processors.debug",
+                "django.template.context_processors.media",
+                "django.template.context_processors.static",
+                "django.template.context_processors.request",
+                "django.contrib.messages.context_processors.messages",
+                "kitsune.sumo.context_processors.global_settings",
+                "kitsune.sumo.context_processors.i18n",
+                "kitsune.sumo.context_processors.aaq_languages",
+                "kitsune.sumo.context_processors.current_year",
+                "kitsune.sumo.context_processors.static_url_webpack",
+                "kitsune.messages.context_processors.unread_message_count",
+            ],
         },
     },
 ]
