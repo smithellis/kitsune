@@ -1,7 +1,8 @@
 from django.urls import include, path, re_path
-from wagtail import urls as wagtail_urls
 
 from kitsune.products import views
+
+from wagtail import urls as wagtail_urls
 
 urlpatterns = [
     path("", include(wagtail_urls)),

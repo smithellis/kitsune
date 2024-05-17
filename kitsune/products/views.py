@@ -9,6 +9,13 @@ from kitsune.questions import config as aaq_config
 from kitsune.wiki.decorators import check_simple_wiki_locale
 from kitsune.wiki.facets import documents_for, topics_for
 from kitsune.wiki.utils import get_featured_articles
+from wagtail import blocks
+from wagtail.images.blocks import ImageChooserBlock
+from wagtail.models import Page
+from wagtail.fields import StreamField
+
+# import MultiFieldPanel:
+from wagtail.admin.panels import FieldPanel
 
 
 @check_simple_wiki_locale
@@ -105,3 +112,45 @@ def document_listing(request, product_slug, topic_slug, subtopic_slug=None):
             "search_params": {"product": product_slug},
         },
     )
+
+
+class ProductBlock(blocks.StructBlock):
+    products = Product.objects.filter(visible=True)
+    prod_name_choices = [(p.slug, p.title) for p in products]
+
+    name = blocks.ChoiceBlock(choices=prod_name_choices)
+    slug = blocks.CharBlock()
+    blurb = blocks.TextBlock()
+    icon = ImageChooserBlock(required=False)
+
+    class Meta:
+        template = "blocks/product_block.html"
+
+
+class FeaturedArticleBlock(blocks.StructBlock):
+    title = blocks.CharBlock()
+    description = blocks.TextBlock()
+    link = blocks.URLBlock()
+    image = ImageChooserBlock()
+
+
+class SearchBlock(blocks.StructBlock):
+    title = blocks.CharBlock()
+    placeholder = blocks.CharBlock()
+    button_text = blocks.CharBlock()
+
+    class Meta:
+        template = "blocks/search_block.html"
+
+
+class ProductList(Page):
+    body = StreamField(
+        [
+            ("product_block", blocks.ListBlock(ProductBlock())),
+            ("featured_article_block", blocks.ListBlock(FeaturedArticleBlock())),
+        ]
+    )
+
+    content_panels = Page.content_panels + [
+        FieldPanel("body"),
+    ]

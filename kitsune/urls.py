@@ -14,6 +14,7 @@ from kitsune.sumo.i18n import i18n_patterns
 # admin.
 from kitsune.sumo.monkeypatch import patch
 
+
 patch()
 
 from django.contrib import admin  # noqa

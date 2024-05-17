@@ -1,14 +1,23 @@
 {% extends "base.html" %}
+
+{% set title = _('Products') %}
+{% set crumbs = [(None, title)] %}
+{% set canonical_url = canonicalize(viewname='products') %}
+{% set ga_content_group = "list-products" %}
+
 {% block hidden_search_masthead %}{% endblock %}
 
 {% block masthead %}
 <section class="home-search-section sumo-page-section shade-bg" id="products-and-services" >
   <div class="mzp-l-content">
-
+    {% block breadcrumbs %}
+      {{ breadcrumbs(crumbs, id='main-breadcrumbs') }}
+    {% endblock %}
   </div>
   <div class="mzp-l-content narrow">
     <div class="home-search-section--content">
-      <h1 class="sumo-page-heading-xl">{{ page.title }}</h1>
+      <h1 class="sumo-page-heading-xl">{{ title }}</h1>
+      {{ search_box(settings, id='support-search-masthead', params=search_params) }}
     </div>
   </div>
 </section>
