@@ -89,7 +89,7 @@ class SUMORefreshIDTokenAdminMiddleware(SessionRefresh):
                 messages.error(request, f"OIDC login required for {console} access")
                 return HttpResponseRedirect(f"/{console.lower()}/login/")
 
-        return super(SUMORefreshIDTokenAdminMiddleware, self).process_request(request)
+            return super(SUMORefreshIDTokenAdminMiddleware, self).process_request(request)
 
 
 class ValidateAccessTokenMiddleware(SessionRefresh):
