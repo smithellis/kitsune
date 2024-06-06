@@ -7,6 +7,9 @@ from kitsune.sumo.models import ModelBase
 from kitsune.sumo.urlresolvers import reverse
 from kitsune.sumo.utils import webpack_static
 
+from wagtail.admin.panels import FieldPanel
+from wagtail.snippets.models import register_snippet
+
 HOT_TOPIC_SLUG = "hot"
 
 
@@ -15,6 +18,7 @@ class ProductQuerySet(models.QuerySet):
         return self.filter(questions_locales__locale=request.LANGUAGE_CODE).filter(codename="")
 
 
+@register_snippet
 class Product(ModelBase):
     title = models.CharField(max_length=255, db_index=True)
     codename = models.CharField(max_length=255, blank=True, default="")
@@ -53,6 +57,18 @@ class Product(ModelBase):
         ordering = ["display_order"]
 
     objects = ProductQuerySet.as_manager()
+
+    panels = [
+        FieldPanel("title"),
+        FieldPanel("codename"),
+        FieldPanel("slug"),
+        FieldPanel("description"),
+        FieldPanel("image"),
+        FieldPanel("image_alternate"),
+        FieldPanel("display_order"),
+        FieldPanel("visible"),
+        FieldPanel("platforms"),
+    ]
 
     def __str__(self):
         return "%s" % self.title
@@ -183,6 +199,7 @@ class Version(ModelBase):
         ordering = ["-max_version"]
 
 
+@register_snippet
 class Platform(ModelBase):
     name = models.CharField(max_length=255)
     slug = models.SlugField()
@@ -190,6 +207,13 @@ class Platform(ModelBase):
     # Dictates the order in which products are displayed in product
     # lists.
     display_order = models.IntegerField()
+
+    panels = [
+        FieldPanel("name"),
+        FieldPanel("slug"),
+        FieldPanel("visible"),
+        FieldPanel("display_order"),
+    ]
 
     def __str__(self):
         return "%s" % self.name
