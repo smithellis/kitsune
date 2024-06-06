@@ -8,6 +8,7 @@ from kitsune.sumo.urlresolvers import reverse
 from kitsune.sumo.utils import webpack_static
 
 from wagtail.admin.panels import FieldPanel
+from wagtail.models import PreviewableMixin
 from wagtail.snippets.models import register_snippet
 
 HOT_TOPIC_SLUG = "hot"
@@ -19,7 +20,7 @@ class ProductQuerySet(models.QuerySet):
 
 
 @register_snippet
-class Product(ModelBase):
+class Product(PreviewableMixin, ModelBase):
     title = models.CharField(max_length=255, db_index=True)
     codename = models.CharField(max_length=255, blank=True, default="")
     slug = models.SlugField()
@@ -57,7 +58,7 @@ class Product(ModelBase):
         ordering = ["display_order"]
 
     objects = ProductQuerySet.as_manager()
-
+    # Wagtail specifics
     panels = [
         FieldPanel("title"),
         FieldPanel("codename"),
@@ -69,6 +70,9 @@ class Product(ModelBase):
         FieldPanel("visible"),
         FieldPanel("platforms"),
     ]
+
+    def get_preview_template(self, request, mode_name):
+        return "products/product_card.html"
 
     def __str__(self):
         return "%s" % self.title
