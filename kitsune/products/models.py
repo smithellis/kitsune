@@ -72,7 +72,7 @@ class Product(PreviewableMixin, ModelBase):
     ]
 
     def get_preview_template(self, request, mode_name):
-        return "products/product_card.html"
+        return "products/product_card_preview.html"
 
     def __str__(self):
         return "%s" % self.title

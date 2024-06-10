@@ -1,6 +1,7 @@
-from django.urls import re_path
+from django.urls import include, re_path
 
 from kitsune.products import views
+from wagtail import urls as wagtail_urls
 
 urlpatterns = [
     re_path(r"^$", views.product_list, name="products"),
@@ -15,4 +16,5 @@ urlpatterns = [
         views.document_listing,
         name="products.subtopics",
     ),
+    re_path(r"", include(wagtail_urls)),
 ]
