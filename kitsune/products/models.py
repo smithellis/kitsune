@@ -7,10 +7,12 @@ from kitsune.sumo.models import ModelBase
 from kitsune.sumo.urlresolvers import reverse
 from kitsune.sumo.utils import webpack_static
 
+from modelcluster.fields import ParentalKey
+
 from wagtail import blocks
 from wagtail.fields import StreamField
-from wagtail.admin.panels import FieldPanel
-from wagtail.models import Page, PreviewableMixin
+from wagtail.admin.panels import FieldPanel, InlinePanel
+from wagtail.models import Orderable, Page, PreviewableMixin
 from wagtail.snippets.blocks import SnippetChooserBlock
 from wagtail.snippets.models import register_snippet
 
@@ -131,7 +133,40 @@ class LandingPage(Page):
         verbose_name_plural = "Product Indexes"
 
 
+class ProductTopicOrderable(Orderable):
+    page = ParentalKey("ProductPage", on_delete=models.CASCADE, related_name="product_topics")
+    topic = models.ForeignKey("Topic", on_delete=models.CASCADE)
+    product = models.ForeignKey("Product", on_delete=models.CASCADE)
+
+    panels = [
+        FieldPanel("topic"),
+        FieldPanel("product"),
+    ]
+
+
+class ProductPage(Page):
+    product = models.ForeignKey("Product", on_delete=models.CASCADE, related_name="product_pages")
+
+    content_panels = Page.content_panels + [
+        FieldPanel("product"),
+        InlinePanel("product_topics", label="Topics"),
+    ]
+
+    def get_context(self, request):
+        context = super().get_context(request)
+        context["topics"] = self.product_topics.all().order_by("sort_order")
+        return context
+
+    def get_template(self, request):
+        return "products/product.html"
+
+    class Meta:
+        verbose_name = "Product Topics Page"
+        verbose_name_plural = "Product Topics Pages"
+
+
 # Note: This is the "new" Topic class
+@register_snippet
 class Topic(ModelBase):
     title = models.CharField(max_length=255, db_index=True)
     # We don't use a SlugField here because it isn't unique by itself.
