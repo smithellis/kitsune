@@ -8,10 +8,23 @@ from kitsune.sumo.models import ModelBase
 from kitsune.sumo.urlresolvers import reverse
 from kitsune.sumo.utils import webpack_static
 
+from wagtail.admin.panels import FieldPanel
+from wagtail.models import PreviewableMixin
+
+from wagtail.snippets.models import register_snippet
+
 HOT_TOPIC_SLUG = "hot"
 
 
-class Product(ModelBase):
+class ProductQuerySet(models.QuerySet):
+    def with_question_forums(self, request):
+        return self.filter(questions_locales__locale=request.LANGUAGE_CODE).filter(codename="")
+
+
+# Wagtail: Registering our existing Product model as a Wagtail Snippet
+# And adding PreviewablerMixin to allow prevewing in the Wagtail Admin
+@register_snippet
+class Product(ModelBase, PreviewableMixin):
     title = models.CharField(max_length=255, db_index=True)
     codename = models.CharField(max_length=255, blank=True, default="")
     slug = models.SlugField()
@@ -84,6 +97,22 @@ class Product(ModelBase):
         if self.is_archived:
             self.topics.update(is_archived=True)
         super().save(*args, **kwargs)
+
+    # Wagtail Product additions
+    panels = [
+        FieldPanel("title"),
+        FieldPanel("codename"),
+        FieldPanel("slug"),
+        FieldPanel("description"),
+        FieldPanel("image"),
+        FieldPanel("image_alternate"),
+        FieldPanel("display_order"),
+        FieldPanel("visible"),
+        FieldPanel("platforms"),
+    ]
+
+    def get_preview_template(self, request, mode_name):
+        return "products/product_card_preview.html"
 
 
 # Note: This is the "new" Topic class

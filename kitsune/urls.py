@@ -16,6 +16,8 @@ from kitsune.sumo import views as sumo_views
 from kitsune.sumo.decorators import csp_allow_inline_scripts_and_styles
 from kitsune.sumo.i18n import i18n_patterns
 
+from wagtail import urls as wagtail_urls
+
 # Note: This must come before importing admin because it patches the
 # admin.
 from kitsune.sumo.monkeypatch import patch
@@ -54,6 +56,7 @@ urlpatterns = i18n_patterns(
         waffle_flag("wagtail_experiments")(wagtail_serve),
         name="wagtail_serve",
     ),
+    path("", include(wagtail_urls)),
 )
 
 if settings.OIDC_ENABLE:
