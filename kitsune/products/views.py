@@ -14,6 +14,17 @@ from kitsune.wiki.facets import documents_for, topics_for
 from kitsune.wiki.models import Revision
 from kitsune.wiki.utils import get_featured_articles
 
+from wagtail.models import Page
+from wagtail.views import serve as wagtail_serve
+
+
+def wagtail_or_sumo(request, slug=None):
+    try:
+        path = "/products/" + slug
+        return wagtail_serve(request, path)
+    except Page.DoesNotExist:
+        return product_landing(request, slug)
+
 
 @check_simple_wiki_locale
 def product_list(request):
