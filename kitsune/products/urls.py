@@ -1,8 +1,10 @@
-from django.urls import include, re_path
+from django.urls import include, path, re_path
+from wagtail import urls as wagtail_urls
 
 from kitsune.products import views
 
 product_patterns = [
+    path("<wagslug:slug>", views.wagtail_or_sumo, name="products.product"),
     re_path(r"^$", views.product_list, name="products"),
     re_path(r"^(?P<slug>[^/]+)$", views.product_landing, name="products.product"),
     re_path(

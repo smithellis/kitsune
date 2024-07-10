@@ -1,4 +1,4 @@
-from django.http import Http404
+from django.urls import register_converter
 
 from wagtail import blocks
 from wagtail.fields import StreamField
@@ -7,6 +7,22 @@ from wagtail.models import Page
 from wagtail.contrib.routable_page.models import RoutablePageMixin, path, re_path
 from wagtail.snippets.blocks import SnippetChooserBlock
 
+
+# Custom converter for Wagtail to see if a page
+# is served by Wagtail or served by Django
+class WagtailConverter:
+    regex = '[a-zA-Z0-9_-]+'
+
+    def to_python(self, value):
+        if Page.objects.filter(slug=value).exists():
+            return value
+        raise ValueError("No Wagtail page found for slug")
+    
+    def to_url(self, value):
+        return value
+    
+# Register the converter
+register_converter(WagtailConverter, 'wagslug')
 
 # Wagtail: This is a StructBlock that allows selection of a Product Snippet
 class ProductSnippetBlock(blocks.StructBlock):
@@ -88,8 +104,6 @@ class StructuralPage(Page):
     under/in which other pages live.
     Not directly viewable - will redirect to its parent page if called"""
 
-    # There are minimal fields on this model - only exactly what we need
-    # `title` and `slug` fields come from Page->AbstractBedrockCMSPage
     is_structural_page = True
     # TO COME: guard rails on page heirarchy
     # subpage_types = []
