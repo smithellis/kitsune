@@ -50,13 +50,13 @@ urlpatterns = i18n_patterns(
     path("", include("kitsune.tidings.urls")),
     path("", include("kitsune.users.urls")),
     path("locales", sumo_views.locales, name="sumo.locales"),
-    path("", include(wagtail_urls)),
     re_path(r"^windows7-support(?:\\/)?$", RedirectView.as_view(url="/home/?as=u")),
     re_path(
         rf"wagtail/{serve_pattern.lstrip('^')}",
         waffle_flag("wagtail_experiments")(wagtail_serve),
         name="wagtail_serve",
     ),
+    path("", include(wagtail_urls)),
 )
 
 if settings.OIDC_ENABLE:

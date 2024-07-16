@@ -8,8 +8,8 @@ register_converter(WagtailConverter, "wagslug")
 
 product_patterns = [
     path("", views.product_list, name="products"),
-    path("<wagslug:slug>/", views.wagtail_or_sumo, name="products.product"),
-    path("<wagslug:slug>", views.wagtail_or_sumo, name="products.product"),  # No trailing slash
+    path("<wagslug:slug>/", views.wt_product_serve, name="products.product"),
+    path("<wagslug:slug>", views.wt_product_serve, name="products.product"),  # No trailing slash
     path("<slug>/", views.product_landing, name="products.product"),
     path("<product_slug>/<topic_slug>/", views.document_listing, name="products.documents"),
     path(
