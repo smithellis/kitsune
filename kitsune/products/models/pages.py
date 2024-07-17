@@ -1,4 +1,5 @@
 from django.db import models
+from django.http import Http404
 
 from kitsune.products.models import Product
 from kitsune.products.views import _get_aaq_product_key
@@ -23,6 +24,11 @@ class SumoPlaceholderPage(Page):
         FieldPanel("title"),
         FieldPanel("slug"),
     ]
+
+    is_placeholder = True
+
+    def serve(self, request):
+        return Http404
 
 
 # Define Blocks for Stream Fields

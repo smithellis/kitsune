@@ -1,10 +1,11 @@
 from django.urls import include, path
 
 from kitsune.products import views
+from kitsune.sumo.decorators import prefer_cms
 
 product_patterns = [
     path("", views.product_list, name="products"),
-    path("<slug>/", views.product_landing, name="products.product"),
+    path("<slug>/", prefer_cms(views.product_landing), name="products.product"),
     path("<product_slug>/<topic_slug>/", views.document_listing, name="products.documents"),
     path(
         "<product_slug>/<topic_slug>/<subtopic_slug>/",

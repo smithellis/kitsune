@@ -6,10 +6,10 @@ from csp.utils import build_policy
 from django import http
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
+from django.http import Http404
 
 from kitsune.sumo.utils import is_ratelimited
 
-from wagtail.models import Page
 from wagtail.views import serve as wagtail_serve
 
 
@@ -167,17 +167,16 @@ def remove_locale(url):
     return re.sub(locale_pattern, "/", url)
 
 
-def check_wagtail_page(view_func):
+def prefer_cms(view_func):
     @wraps(view_func)
     def _wrapped_view(request, *args, **kwargs):
-        slug = kwargs.get("slug")
-        if slug:
-            try:
-                page = Page.objects.get(slug=slug)
-                path = remove_locale(page.get_url(request))
-                return wagtail_serve(request, path)
-            except Page.DoesNotExist:
-                pass  # Continue to the original view if no Wagtail page is found
+        path = remove_locale(request.path_info)
+        try:
+            wagtail_response = wagtail_serve(request, path)
+            if wagtail_response.status_code == 200:
+                return wagtail_response
+        except Http404:
+            pass  # Continue to the original view if no Wagtail page is found
         return view_func(request, *args, **kwargs)
 
     return _wrapped_view
