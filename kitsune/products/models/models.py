@@ -8,28 +8,16 @@ from kitsune.sumo.models import ModelBase
 from kitsune.sumo.urlresolvers import reverse
 from kitsune.sumo.utils import webpack_static
 
+from wagtail.models import PreviewableMixin
+
 HOT_TOPIC_SLUG = "hot"
 
 
-class BaseProductTopic(ModelBase):
-    """Abstract base class for Product and Topic."""
-
+class Product(ModelBase, PreviewableMixin):
     title = models.CharField(max_length=255, db_index=True)
-    description = models.TextField()
-    # Whether or not is visible in the ui to users.
-    visible = models.BooleanField(default=False)
-    # whether or not is archived
-    is_archived = models.BooleanField(default=False)
-    # Dictates the display order in lists
-    display_order = models.IntegerField()
-
-    class Meta:
-        abstract = True
-
-
-class Product(BaseProductTopic):
     codename = models.CharField(max_length=255, blank=True, default="")
     slug = models.SlugField()
+    description = models.TextField()
     image = ImagePlusField(
         upload_to=settings.PRODUCT_IMAGE_PATH,
         null=True,
@@ -49,8 +37,17 @@ class Product(BaseProductTopic):
     image_cachebuster = models.CharField(max_length=32, default=None, null=True, editable=False)
     sprite_height = models.IntegerField(default=None, null=True, editable=False)
 
+    # Dictates the order in which products are displayed in product
+    # lists.
+    display_order = models.IntegerField()
+
+    # Whether or not this product is visible in the KB ui to users.
+    visible = models.BooleanField(default=False)
+
     # Platforms this Product runs on.
     platforms = models.ManyToManyField("Platform")
+    # whether or not this product is archived
+    is_archived = models.BooleanField(default=False)
 
     # Override default manager
     objects = models.Manager()
@@ -80,15 +77,23 @@ class Product(BaseProductTopic):
         return bool(self.codename)
 
     def questions_enabled(self, locale):
-        return self.aaq_configs.filter(is_active=True, enabled_locales__locale=locale).exists()
+        return self.questions_locales.filter(locale=locale).exists()
 
     def get_absolute_url(self):
         return reverse("products.product", kwargs={"slug": self.slug})
 
+    def save(self, *args, **kwargs):
+        if self.is_archived:
+            self.topics.update(is_archived=True)
+        super().save(*args, **kwargs)
 
-class Topic(BaseProductTopic):
+
+# Note: This is the "new" Topic class
+class Topic(ModelBase):
+    title = models.CharField(max_length=255, db_index=True)
     # We don't use a SlugField here because it isn't unique by itself.
     slug = models.CharField(max_length=255, db_index=True)
+    description = models.TextField()
     image = ImagePlusField(
         upload_to=settings.TOPIC_IMAGE_PATH,
         null=True,
@@ -96,6 +101,10 @@ class Topic(BaseProductTopic):
         max_length=settings.MAX_FILEPATH_LENGTH,
     )
 
+    # Topics are product-specific
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE, related_name="topics", null=True
+    )
     products = models.ManyToManyField(Product, through="ProductTopic", related_name="m2m_topics")
 
     # Topics can optionally have a parent.
@@ -103,23 +112,29 @@ class Topic(BaseProductTopic):
         "self", on_delete=models.CASCADE, related_name="subtopics", null=True, blank=True
     )
 
+    # Dictates the order in which topics are displayed in topic lists.
+    display_order = models.IntegerField()
+
+    # Whether or not this topic is visible in the ui to users.
+    visible = models.BooleanField(default=False)
     # Whether or not this topic is used in the AAQ.
     in_aaq = models.BooleanField(
         default=False, help_text=_lazy("Whether this topic is shown to users in the AAQ or not.")
     )
-    # Whether or not this topic is displayed in navigation menus
-    in_nav = models.BooleanField(
-        default=False, help_text=_lazy("Whether this topic is shown in navigation menus.")
-    )
+    # whether or not this topic is archived
+    is_archived = models.BooleanField(default=False)
 
     class Meta(object):
-        ordering = ["title", "display_order"]
+        ordering = ["product", "display_order"]
+        unique_together = ("slug", "product")
 
     # Override default manager
     objects = models.Manager()
     active = NonArchivedManager()
 
     def __str__(self):
+        if self.product:
+            return f"{self.product.title} {self.title}"
         return self.title
 
     @property
@@ -144,25 +159,32 @@ class Topic(BaseProductTopic):
         query = {
             "user": user,
             "topics": self,
-            "products__in": self.products,
+            "products": self.product,
             "is_archived": False,
             "category__in": settings.IA_DEFAULT_CATEGORIES,
         }
         query.update(kwargs)
         return Document.objects.visible(**query)
 
-    def get_absolute_url(self, product_slug=None):
-        kwargs = {"topic_slug": self.slug}
-        named_url = "products.topic_documents"
-        if product_slug:
-            kwargs.update({"product_slug": product_slug})
-            named_url = "products.documents"
-
-            if self.parent:
-                assert self.parent.parent is None
-                kwargs.update({"topic_slug": self.parent.slug, "subtopic_slug": self.slug})
-                named_url = "products.subtopics"
-        return reverse(named_url, kwargs=kwargs)
+    def get_absolute_url(self):
+        if self.parent is None:
+            return reverse(
+                "products.documents",
+                kwargs={
+                    "product_slug": self.product.slug,
+                    "topic_slug": self.slug,
+                },
+            )
+        else:
+            assert self.parent.parent is None
+            return reverse(
+                "products.subtopics",
+                kwargs={
+                    "product_slug": self.product.slug,
+                    "topic_slug": self.parent.slug,
+                    "subtopic_slug": self.slug,
+                },
+            )
 
 
 class ProductTopic(ModelBase):
