@@ -1,10 +1,11 @@
 from django.urls import include, re_path
 
 from kitsune.products import views
+from kitsune.sumo.decorators import prefer_cms
 
 product_patterns = [
     re_path(r"^$", views.product_list, name="products"),
-    re_path(r"^(?P<slug>[^/]+)$", views.product_landing, name="products.product"),
+    re_path(r"^(?P<slug>[^/]+)$", prefer_cms(views.product_landing), name="products.product"),
     re_path(
         r"^(?P<product_slug>[^/]+)/(?P<topic_slug>[^/]+)$",
         views.document_listing,
