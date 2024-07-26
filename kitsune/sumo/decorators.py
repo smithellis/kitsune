@@ -170,9 +170,9 @@ def remove_locale(url):
 def prefer_cms(view_func):
     @wraps(view_func)
     def _wrapped_view(request, *args, **kwargs):
-        path = remove_locale(request.path_info)
+        no_locale_path = remove_locale(request.path_info)
         try:
-            wagtail_response = wagtail_serve(request, path)
+            wagtail_response = wagtail_serve(request, no_locale_path)
             if wagtail_response.status_code == 200:
                 return wagtail_response
         except Http404:
