@@ -1,6 +1,6 @@
 <div class="sumo-card-grid is-four-wide">
   <div class="scroll-wrap">
-    {% for doc in featured %}
+    {% for doc in value.featured %}
     <div class="card card--article zoom-on-hover">
       <img class="card--icon-sm" src="{{ webpack_static('protocol/img/icons/reader-mode.svg') }}" alt="{{ doc.title }}" />
       <div class="card--details">
@@ -12,6 +12,21 @@
         </h3>
         <p class="card--desc">
           {{ doc.current_revision.summary }}
+        </p>
+      </div>
+    </div>
+    {% else %}
+    <div class="card card--article zoom-on-hover">
+      <img class="card--icon-sm" src="{{ webpack_static('protocol/img/icons/reader-mode.svg') }}" alt="None" />
+      <div class="card--details">
+        <h3 class="card--title">
+          <a class="expand-this-link" href="#"
+            data-event-name="link_click"
+            data-event-parameters='#'>
+            Just Proving I Exist</a>
+        </h3>
+        <p class="card--desc">
+          Nothing here.
         </p>
       </div>
     </div>

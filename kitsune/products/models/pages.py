@@ -6,6 +6,8 @@ from kitsune.products.views import _get_aaq_product_key
 from kitsune.wiki.facets import topics_for
 from kitsune.wiki.utils import get_featured_articles
 
+from typing import List
+
 from wagtail import blocks
 from wagtail.fields import StreamField
 from wagtail.admin.panels import FieldPanel
@@ -24,6 +26,8 @@ class SumoPlaceholderPage(Page):
         FieldPanel("title"),
         FieldPanel("slug"),
     ]
+
+    promote_panels: List[FieldPanel] = []
 
     is_placeholder = True
 
@@ -83,6 +87,7 @@ class FeaturedArticlesBlock(blocks.StructBlock):
 
     def get_context(self, value, parent_context=None):
         context = super().get_context(value, parent_context=parent_context)
+        context["featured"] = get_featured_articles(product=context["product"], locale="en-US")
         return context
 
     class Meta:
@@ -96,6 +101,9 @@ class FrequentTopicsBlock(blocks.StructBlock):
 
     def get_context(self, value, parent_context=None):
         context = super().get_context(value, parent_context=parent_context)
+        context["topics"] = topics_for(
+            user=context["user"], product=context["product"], parent=None
+        )
         return context
 
     class Meta:
@@ -121,15 +129,12 @@ class SingleProductIndexPage(Page):
         ]
     )
 
-    content_panels = Page.content_panels + [FieldPanel("product"), FieldPanel("body")]
-
     def get_context(self, request, *args, **kwargs):
         context = super().get_context(request, *args, **kwargs)
-        context["product"] = self.product
-        context["topics"] = topics_for(request.user, product=self.product, parent=None)
-        context["featured"] = get_featured_articles(self.product, locale=request.LANGUAGE_CODE)
         context["product_key"] = _get_aaq_product_key(self.product.slug)
         return context
+
+    content_panels = Page.content_panels + [FieldPanel("product"), FieldPanel("body")]
 
     class Meta:
         verbose_name = "Single Product Index"
