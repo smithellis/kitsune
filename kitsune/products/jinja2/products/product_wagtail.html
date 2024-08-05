@@ -24,8 +24,6 @@
     {% include_block block %}
   {% endif %}
 {% endfor %}
-
-
 {% endblock %}
 
 {% block contentwrap %}
@@ -36,8 +34,6 @@
   {% endif %}
 {% endfor %}
 
-  {{ topic_metadata(topics, product=product, product_key=product_key) }}
-
 {% for block in page.body %}
   {%if block.block_type == 'featured_articles' %}
     {% include_block block %}
@@ -45,9 +41,13 @@
 {% endfor %}
 
 
-  <section class="mzp-l-content mzp-l-content sumo-page-section--inner">
-    {% include "landings/includes/join-our-community-callout.html" %}
-  </section>
+{% for block in page.body %}
+  {%if block.block_type == 'cta' %}
+    {% include_block block %}
+  {% endif %}
+{% endfor %}
+
+
 </div>
 
 {% endblock %}
