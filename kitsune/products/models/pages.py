@@ -28,6 +28,7 @@ class SumoPlaceholderPage(Page):
     ]
 
     promote_panels: List[FieldPanel] = []
+    preview_modes: List[Page.preview_modes] = []
 
     is_placeholder = True
 
@@ -96,6 +97,17 @@ class FeaturedArticlesBlock(blocks.StructBlock):
         label = "Featured Articles"
 
 
+class FeaturedArticleBlock(blocks.StructBlock):
+    """Block for picking a single featured article"""
+
+    article = SnippetChooserBlock(target_model="wiki.Document", required=True)
+
+    class Meta:
+        template = "products/blocks/featured_article_block.html"
+        icon = "doc-full-inverse"
+        label = "Featured Article"
+
+
 class FrequentTopicsBlock(blocks.StructBlock):
     """Block for the frequent topics"""
 
@@ -125,6 +137,7 @@ class SingleProductIndexPage(Page):
             ("search", SearchBlock()),
             ("cta", CTABlock()),
             ("featured_articles", FeaturedArticlesBlock()),
+            ("featured_article", FeaturedArticleBlock()),
             ("frequent_topics", FrequentTopicsBlock()),
         ]
     )
