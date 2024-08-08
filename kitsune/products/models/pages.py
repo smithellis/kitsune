@@ -13,26 +13,6 @@ from wagtail.models import Page
 from wagtail.snippets.blocks import SnippetChooserBlock
 
 
-class SumoPlaceholderPage(Page):
-    """A page used to allow for child pages to be created
-    so we can have a proper Wagtail tree structure"""
-
-    settings_panels = Page.settings_panels + [
-        FieldPanel("show_in_menus"),
-    ]
-    content_panels = [
-        FieldPanel("title"),
-        FieldPanel("slug"),
-    ]
-
-    promote_panels: list[Page.promote_panels] = []
-
-    is_placeholder = True
-
-    def serve(self, request):
-        return Http404
-
-
 # Define Blocks for Stream Fields
 # Wagtail: This is a StructBlock that allows selection of a Product Snippet
 class ProductSnippetBlock(blocks.StructBlock):
@@ -46,8 +26,24 @@ class ProductSnippetBlock(blocks.StructBlock):
         label = "Product Card"
 
 
+class DocumentSnippetBlock(blocks.StructBlock):
+    """Block for document snippets"""
+
+    document = SnippetChooserBlock(target_model="wiki.Document", required=True)
+
+    class Meta:
+        template = "products/blocks/document_snippet_block.html"
+        icon = "doc-full-inverse"
+        label = "Document Card"
+
+
 class SearchBlock(blocks.StructBlock):
     """Block for the search form"""
+
+    title = blocks.CharBlock(required=False, max_length=255)
+    placeholder = blocks.CharBlock(required=False, max_length=255)
+
+    content_panels = Page.content_panels + [FieldPanel("title"), FieldPanel("placeholder")]
 
     def get_context(self, value, parent_context=None):
         context = super().get_context(value, parent_context=parent_context)
@@ -83,6 +79,8 @@ class CTABlock(blocks.StructBlock):
 class FeaturedArticlesBlock(blocks.StructBlock):
     """Block for the featured articles"""
 
+    article = SnippetChooserBlock(target_model="wiki.Document", required=True)
+
     def get_context(self, value, parent_context=None):
         context = super().get_context(value, parent_context=parent_context)
         context["featured"] = get_featured_articles(product=context["product"], locale="en-US")
@@ -94,21 +92,25 @@ class FeaturedArticlesBlock(blocks.StructBlock):
         label = "Featured Articles"
 
 
-class FrequentTopicsBlock(blocks.StructBlock):
-    """Block for the frequent topics"""
+class SumoPlaceholderPage(Page):
+    """A page used to allow for child pages to be created
+    so we can have a proper Wagtail tree structure"""
 
-    def get_context(self, value, parent_context=None):
-        context = super().get_context(value, parent_context=parent_context)
-        context["topics"] = topics_for(
-            user=context["user"], product=context["product"], parent=None
-        )
-        return context
+    settings_panels = Page.settings_panels + [
+        FieldPanel("show_in_menus"),
+    ]
+    content_panels = [
+        FieldPanel("title"),
+        FieldPanel("slug"),
+    ]
 
-    class Meta:
-        template = "products/blocks/frequent_topics_block.html"
-        icon = "doc-full-inverse"
-        label = "Frequent Topics"
-        max = 1
+    promote_panels = []  # type: ignore # type: list[Page.promote_panels]
+    preview_modes = []  # type: list[Page.preview_modes]
+
+    is_placeholder = True
+
+    def serve(self, request):
+        return Http404
 
 
 class SingleProductIndexPage(Page):
@@ -116,23 +118,31 @@ class SingleProductIndexPage(Page):
 
     template = "products/product_wagtail.html"
 
-    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="product_index")
+    # TODO limit this to only products that are visible, viewable, etc.
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    frequent_topics = models.BooleanField(default=True)
 
     body = StreamField(
         [
             ("search", SearchBlock()),
             ("cta", CTABlock()),
             ("featured_articles", FeaturedArticlesBlock()),
-            ("frequent_topics", FrequentTopicsBlock()),
         ]
     )
 
     def get_context(self, request, *args, **kwargs):
         context = super().get_context(request, *args, **kwargs)
         context["product_key"] = _get_aaq_product_key(self.product.slug)
+        if self.frequent_topics:
+            context["frequent_topics"] = topics_for(
+                user=request.user, product=self.product, parent=None
+            )
         return context
 
-    content_panels = Page.content_panels + [FieldPanel("product"), FieldPanel("body")]
+    content_panels = Page.content_panels + [
+        FieldPanel("product"),
+        FieldPanel("body"),
+    ]
 
     class Meta:
         verbose_name = "Single Product Index"
