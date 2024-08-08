@@ -29,20 +29,32 @@
 {% block contentwrap %}
 <div id="main-content">
 {% for block in page.body %}
-  {%if block.block_type == 'frequent_topics' %}
-    {% include_block block %}
-  {% endif %}
-{% endfor %}
-
-{% for block in page.body %}
-  {%if block.block_type == 'featured_articles' %}
+  {% if block.block_type == 'frequent_topics' %}
     {% include_block block %}
   {% endif %}
 {% endfor %}
 
 
+<section class="mzp-l-content mzp-l-content sumo-page-section--inner">
+      <h2 class="sumo-page-subheading text-center-to-left-on-large">{{ _('Featured Articles') }}</h2>   
+        <div class="sumo-card-grid is-four-wide">
+          <div class="scroll-wrap">
+            {% for block in page.body %}
+              {% if block.block_type == 'featured_articles' %}
+                {% include_block block %}
+              {% endif %}
+            {% endfor %}
+            {% for block in page.body %}
+              {% if block.block_type == 'featured_article' %}
+                {% include_block block %}
+              {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+</section>
+
 {% for block in page.body %}
-  {%if block.block_type == 'cta' %}
+  {% if block.block_type == 'cta' %}
     {% include_block block %}
   {% endif %}
 {% endfor %}
