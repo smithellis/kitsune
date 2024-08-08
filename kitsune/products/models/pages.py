@@ -94,7 +94,7 @@ class FeaturedArticlesBlock(blocks.StructBlock):
     class Meta:
         template = "products/blocks/featured_articles_block.html"
         icon = "doc-full-inverse"
-        label = "Featured Articles"
+        label = "All Featured Articles for Product"
 
 
 class FeaturedArticleBlock(blocks.StructBlock):
@@ -105,7 +105,7 @@ class FeaturedArticleBlock(blocks.StructBlock):
     class Meta:
         template = "products/blocks/featured_article_block.html"
         icon = "doc-full-inverse"
-        label = "Featured Article"
+        label = "Additional Featured Article"
 
 
 class FrequentTopicsBlock(blocks.StructBlock):
