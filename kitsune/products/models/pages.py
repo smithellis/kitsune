@@ -65,7 +65,7 @@ class SearchBlock(blocks.StructBlock):
 class CTABlock(blocks.StructBlock):
     """Block for the call to action"""
 
-    # Doesn't do much at the moment...todo
+    # Doesn't do much at the moment...#todo
 
     text = blocks.CharBlock(required=True, max_length=255)
     link = blocks.URLBlock(required=True)
@@ -139,6 +139,7 @@ class SingleProductIndexPage(Page):
             ("featured_articles", FeaturedArticlesBlock()),
             ("featured_article", FeaturedArticleBlock()),
             ("frequent_topics", FrequentTopicsBlock()),
+            ("text", blocks.RichTextBlock(search_index=True, editor="default")),
         ]
     )
 
