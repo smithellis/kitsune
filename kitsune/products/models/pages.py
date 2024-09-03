@@ -2,7 +2,6 @@ from django.db import models
 from django.http import Http404
 
 from kitsune.products.models import Product
-from kitsune.products.views import _get_aaq_product_key
 from kitsune.wiki.facets import topics_for
 from kitsune.wiki.utils import get_featured_articles
 
@@ -67,7 +66,8 @@ class CTABlock(blocks.StructBlock):
 
     # Doesn't do much at the moment...#todo
 
-    text = blocks.CharBlock(required=True, max_length=255)
+    headline = blocks.CharBlock(required=True, max_length=255)
+    details = blocks.RichTextBlock(required=True)
     link = blocks.URLBlock(required=True)
     type = blocks.ChoiceBlock(
         choices=[
@@ -145,7 +145,6 @@ class SingleProductIndexPage(Page):
 
     def get_context(self, request, *args, **kwargs):
         context = super().get_context(request, *args, **kwargs)
-        context["product_key"] = _get_aaq_product_key(self.product.slug)
         return context
 
     content_panels = Page.content_panels + [FieldPanel("product"), FieldPanel("body")]
