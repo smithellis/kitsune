@@ -18,7 +18,7 @@
 {% block hidden_search_masthead %}{% endblock %}
 
 {% block masthead %}
-<!-- Served by WT -->
+<h1>WT</h1>
 {% for block in page.body %}
   {%if block.block_type == 'search' %}
     {% include_block block %}
@@ -28,18 +28,26 @@
 
 {% block contentwrap %}
 <div id="main-content">
+
+{% for block in page.body %}
+  {% if block.block_type == 'text' %}
+    <section class="mzp-l-content mzp-l-content sumo-page-section--inner">
+      {% include_block block %}
+    </section>
+  {% endif %}
+{% endfor %}
+
 {% for block in page.body %}
   {% if block.block_type == 'frequent_topics' %}
     {% include_block block %}
   {% endif %}
 {% endfor %}
 
-{% if page.body.first_block_by_name('featured_articles') or page.body.first_block_by_name('featured_article') %}
+
 <section class="mzp-l-content mzp-l-content sumo-page-section--inner">
-      <h2 class="sumo-page-subheading text-center-to-left-on-large">{{ _('Featured Articles') }}</h2>       
+      <h2 class="sumo-page-subheading text-center-to-left-on-large">{{ _('Featured Articles') }}</h2>   
         <div class="sumo-card-grid is-four-wide">
           <div class="scroll-wrap">
-{% endif %}
             {% for block in page.body %}
               {% if block.block_type == 'featured_articles' %}
                 {% include_block block %}
@@ -50,11 +58,9 @@
                 {% include_block block %}
               {% endif %}
             {% endfor %}
-{% if page.body.blocks_by_name.featured_articles or page.body.blocks_by_name.featured_article %}
           </div>
         </div>
 </section>
-{% endif %}
 
 {% for block in page.body %}
   {% if block.block_type == 'cta' %}
