@@ -67,7 +67,8 @@ class CTABlock(blocks.StructBlock):
 
     # Doesn't do much at the moment...todo
 
-    text = blocks.CharBlock(required=True, max_length=255)
+    headline = blocks.CharBlock(required=True, max_length=255)
+    details = blocks.RichTextBlock(required=True)
     link = blocks.URLBlock(required=True)
     type = blocks.ChoiceBlock(
         choices=[
