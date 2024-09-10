@@ -1,4 +1,7 @@
-  {% if value.featured %}
+<h2 class="sumo-page-subheading text-center-to-left-on-large">{{ _('Featured Articles') }}</h2>   
+  <div class="sumo-card-grid is-four-wide">
+    <div class="scroll-wrap">
+ {% if value.featured %}
     {% for doc in value.featured %}
       <div class="card card--article zoom-on-hover">
         <img class="card--icon-sm" src="{{ webpack_static('protocol/img/icons/reader-mode.svg') }}" alt="{{ doc.title }}" />
@@ -16,3 +19,5 @@
       </div>
     {% endfor %}
   {% endif %}
+</div>
+</div>

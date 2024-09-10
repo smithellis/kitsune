@@ -17,57 +17,17 @@
 {% block hidden_search_masthead %}{% endblock %}
 
 {% block masthead %}
-
-{% for block in page.body %}
-  {%if block.block_type == 'search' %}
-    {% include_block block %}
-  {% endif %}
-{% endfor %}
 {% endblock %}
 
 {% block contentwrap %}
 <div id="main-content">
-
-{% for block in page.body %}
-  {% if block.block_type == 'text' %}
     <section class="mzp-l-content mzp-l-content sumo-page-section--inner">
+
+{% for block in page.body %}
       {% include_block block %}
+{% endfor %}
+
     </section>
-  {% endif %}
-{% endfor %}
-
-{% for block in page.body %}
-  {% if block.block_type == 'frequent_topics' %}
-    {% include_block block %}
-  {% endif %}
-{% endfor %}
-
-
-<section class="mzp-l-content mzp-l-content sumo-page-section--inner">
-      <h2 class="sumo-page-subheading text-center-to-left-on-large">{{ _('Featured Articles') }}</h2>   
-        <div class="sumo-card-grid is-four-wide">
-          <div class="scroll-wrap">
-            {% for block in page.body %}
-              {% if block.block_type == 'featured_articles' %}
-                {% include_block block %}
-              {% endif %}
-            {% endfor %}
-            {% for block in page.body %}
-              {% if block.block_type == 'featured_article' %}
-                {% include_block block %}
-              {% endif %}
-            {% endfor %}
-          </div>
-        </div>
-</section>
-
-{% for block in page.body %}
-  {% if block.block_type == 'cta' %}
-    {% include_block block %}
-  {% endif %}
-{% endfor %}
-
-
 </div>
 
 {% endblock %}
