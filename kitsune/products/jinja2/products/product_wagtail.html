@@ -42,11 +42,13 @@
   {% endif %}
 {% endfor %}
 
-
+{% set featured_articles_exist = page.body.first_block_by_name('featured_articles') or page.body.first_block_by_name('featured_article') %}
+{% if featured_articles_exist %}
 <section class="mzp-l-content mzp-l-content sumo-page-section--inner">
       <h2 class="sumo-page-subheading text-center-to-left-on-large">{{ _('Featured Articles') }}</h2>   
         <div class="sumo-card-grid is-four-wide">
           <div class="scroll-wrap">
+{% endif %}
             {% for block in page.body %}
               {% if block.block_type == 'featured_articles' %}
                 {% include_block block %}
@@ -57,9 +59,11 @@
                 {% include_block block %}
               {% endif %}
             {% endfor %}
+{% if featured_articles_exist %}
           </div>
         </div>
 </section>
+{% endif %}
 
 {% for block in page.body %}
   {% if block.block_type == 'cta' %}
