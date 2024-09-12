@@ -6,6 +6,7 @@ from django.views.static import serve as servestatic
 from graphene_django.views import GraphQLView
 from waffle.views import wafflejs
 from wagtail.admin.urls import urlpatterns as wagtail_admin_urlpatterns
+from wagtail import urls as wagtail_urls
 from wagtail.utils.urlpatterns import decorate_urlpatterns
 
 from kitsune.dashboards.api import WikiMetricList
@@ -45,6 +46,7 @@ urlpatterns = i18n_patterns(
     path("", include("kitsune.tidings.urls")),
     path("", include("kitsune.users.urls")),
     path("locales", sumo_views.locales, name="sumo.locales"),
+    path("", include(wagtail_urls)),
 )
 
 if settings.OIDC_ENABLE:
