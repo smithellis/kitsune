@@ -2,13 +2,12 @@ import random
 from smtplib import SMTPException
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core import mail
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, Prefetch
 
-from kitsune.tidings.models import EmailUser, Watch, WatchFilter, multi_raw
+from kitsune.tidings.models import EmailUser, Watch, WatchFilter
 from kitsune.tidings.tasks import send_emails
 from kitsune.tidings.utils import collate, hash_to_unsigned
 
@@ -205,94 +204,41 @@ class Event(object):
           notifications having the same email address may still be sent.
 
         """
-        # I don't think we can use the ORM here, as there's no way to get a
-        # second condition (name=whatever) into a left join. However, if we
-        # were willing to have 2 subqueries run for every watch row--select
-        # {are there any filters with name=x?} and select {is there a filter
-        # with name=x and value=y?}--we could do it with extra(). Then we could
-        # have EventUnion simply | the QuerySets together, which would avoid
-        # having to merge in Python.
+        self._validate_filters(filters)
 
-        def filter_conditions():
-            """Return joins, WHERE conditions, and params to bind to them in
-            order to check a notification against all the given filters."""
-            # Not a one-liner. You're welcome. :-)
-            self._validate_filters(filters)
-            joins, wheres, join_params, where_params = [], [], [], []
-            for n, (k, v) in enumerate(iter(filters.items())):
-                joins.append(
-                    "LEFT JOIN tidings_watchfilter f{n} "
-                    "ON f{n}.watch_id=w.id "
-                    "AND f{n}.name=%s".format(n=n)
-                )
-                join_params.append(k)
-                wheres.append("(f{n}.value=%s " "OR f{n}.value IS NULL)".format(n=n))
-                where_params.append(hash_to_unsigned(v))
-            return joins, wheres, join_params + where_params
+        # Build the base queryset for watches
+        watches = Watch.objects.filter(event_type=self.event_type, is_active=True)
 
-        # Apply watchfilter constraints:
-        joins, wheres, params = filter_conditions()
-
-        # Start off with event_type, which is always a constraint. These go in
-        # the `wheres` list to guarantee that the AND after the {wheres}
-        # substitution in the query is okay.
-        wheres.append("w.event_type=%s")
-        params.append(self.event_type)
-
-        # Constrain on other 1-to-1 attributes:
         if self.content_type:
-            wheres.append("(w.content_type_id IS NULL " "OR w.content_type_id=%s)")
-            params.append(ContentType.objects.get_for_model(self.content_type).id)
+            watches = watches.filter(
+                Q(content_type=self.content_type) | Q(content_type__isnull=True)
+            )
         if object_id:
-            wheres.append("(w.object_id IS NULL OR w.object_id=%s)")
-            params.append(object_id)
+            watches = watches.filter(Q(object_id=object_id) | Q(object_id__isnull=True))
         if exclude:
-            # Don't try excluding unsaved Users:1
             if not all(e.id for e in exclude):
                 raise ValueError("Can't exclude an unsaved User.")
+            watches = watches.exclude(user__in=exclude)
 
-            wheres.append("(u.id IS NULL OR u.id NOT IN (%s))" % ", ".join("%s" for e in exclude))
-            params.extend(e.id for e in exclude)
+        # Apply filters
+        for k, v in filters.items():
+            watches = watches.filter(
+                Q(filters__name=k, filters__value=hash_to_unsigned(v))
+                | Q(filters__name=k, filters__value__isnull=True)
+            )
 
-        def get_fields(model):
-            if hasattr(model._meta, "_fields"):
-                # For django versions < 1.6
-                return model._meta._fields()
-            else:
-                # For django versions >= 1.6
-                return model._meta.fields
-
-        User = get_user_model()
-        model_to_fields = dict(
-            (m, [f.get_attname() for f in get_fields(m)]) for m in [User, Watch]
+        # Prefetch related users
+        watches = watches.select_related("user").prefetch_related(
+            Prefetch("filters", queryset=WatchFilter.objects.all())
         )
-        query_fields = ["u.{0}".format(field) for field in model_to_fields[User]]
-        query_fields.extend(["w.{0}".format(field) for field in model_to_fields[Watch]])
 
-        query = (
-            "SELECT {fields} "
-            "FROM tidings_watch w "
-            "LEFT JOIN {user_table} u ON u.id=w.user_id {joins} "
-            "WHERE {wheres} "
-            "AND (length(w.email)>0 OR length(u.email)>0) "
-            "AND w.is_active "
-            "ORDER BY u.email DESC, w.email DESC"
-        ).format(
-            fields=", ".join(query_fields),
-            joins=" ".join(joins),
-            wheres=" AND ".join(wheres),
-            user_table=User._meta.db_table,
-        )
-        # IIRC, the DESC ordering was something to do with the placement of
-        # NULLs. Track this down and explain it.
+        # Fetch users and watches
+        users_and_watches = []
+        for watch in watches:
+            user = watch.user if watch.user else EmailUser(watch.email)
+            users_and_watches.append((user, [watch]))
 
-        # Put watch in a list just for consistency. Once the pairs go through
-        # _unique_by_email, watches will be in a list, and EventUnion uses the
-        # same function to union already-list-enclosed pairs from individual
-        # events.
-        return _unique_by_email(
-            (u, [w]) for u, w in multi_raw(query, params, [User, Watch], model_to_fields)
-        )
+        return _unique_by_email(users_and_watches)
 
     @classmethod
     def _watches_belonging_to_user(cls, user_or_email, object_id=None, **filters):
@@ -325,33 +271,25 @@ class Event(object):
             return Watch.objects.none()
 
         # Filter by stuff in the Watch row:
-        watches = (
-            getattr(Watch, "uncached", Watch.objects)
-            .filter(
-                user_condition,
-                (
-                    Q(content_type=ContentType.objects.get_for_model(cls.content_type))
-                    if cls.content_type
-                    else Q()
-                ),
-                Q(object_id=object_id) if object_id else Q(),
-                event_type=cls.event_type,
-            )
-            .extra(
-                where=[
-                    "(SELECT count(*) FROM tidings_watchfilter WHERE "
-                    "tidings_watchfilter.watch_id="
-                    "tidings_watch.id)=%s"
-                ],
-                params=[len(filters)],
-            )
+        watches = Watch.objects.filter(
+            user_condition,
+            (
+                Q(content_type=ContentType.objects.get_for_model(cls.content_type))
+                if cls.content_type
+                else Q()
+            ),
+            Q(object_id=object_id) if object_id else Q(),
+            event_type=cls.event_type,
         )
-        # Optimization: If the subselect ends up being slow, store the number
-        # of filters in each Watch row or try a GROUP BY.
 
         # Apply 1-to-many filters:
-        for k, v in iter(filters.items()):
+        for k, v in filters.items():
             watches = watches.filter(filters__name=k, filters__value=hash_to_unsigned(v))
+
+        # Prefetch related filters
+        watches = watches.select_related("user").prefetch_related(
+            Prefetch("filters", queryset=WatchFilter.objects.all())
+        )
 
         return watches
 
