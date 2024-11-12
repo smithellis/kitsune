@@ -83,6 +83,41 @@ class MultiUsernameField(forms.Field):
         return users
 
 
+class MultiUsernameOrDisplayNameField(forms.Field):
+    """Form field that takes a comma-separated list of usernames or display names
+    as input, validates that users exist for each one, and returns the list
+    of users."""
+
+    def to_python(self, value):
+        if not value:
+            if self.required:
+                raise forms.ValidationError(_("To field is required."))
+            else:
+                return []
+
+        users = []
+        for username in value.split(","):
+            username = username.strip()
+            msg = ""
+            if username:
+                try:
+                    user = User.objects.get(username=username)
+                except User.DoesNotExist:
+                    try:
+                        user = User.objects.get(profile__name=username)
+                    except User.DoesNotExist:
+                        msg = _("{username} is not a valid username or display name.")
+                if not msg:
+                    users.append(user)
+                else:
+                    if not user.is_active:
+                        msg = _("{username} is not an active user.")
+                if msg:
+                    raise forms.ValidationError(msg.format(username=username))
+
+        return users
+
+
 class MultiUsernameOrGroupnameField(forms.Field):
     """Form field that takes a comma-separated list of usernames or groupnames
     and validates that users/groups exist for each one, and returns the list of
@@ -94,7 +129,7 @@ class MultiUsernameOrGroupnameField(forms.Field):
                 raise ValidationError(_("To field is required."))
             return []
 
-        # This generator expression splits the input string `value` by commas to extract
+        # This generator expression splits the input string value by commas to extract
         # parts, strips whitespace from each part, and then further splits each non-empty
         # part by the colon.
         # Each resulting pair of values (before and after the colon) is stripped of
