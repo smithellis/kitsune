@@ -627,7 +627,6 @@ import collapsibleAccordionInit from "sumo/js/protocol-details-init";
 
   function initRevisionList() {
     var $form = $('#revision-list form.filter');
-    
     if (!$form.length) {
         return;
     }
@@ -653,6 +652,8 @@ import collapsibleAccordionInit from "sumo/js/protocol-details-init";
         }
     }
 
+    updateRevisionList(); // Initial update
+    
     // Update the revision list when the form changes
     function updateRevisionList(query) {
         if (query === undefined) {
