@@ -69,7 +69,7 @@ class MultiUsernameField(forms.Field):
                 return []
 
         users = []
-        usernames = [name.strip() for name in value.split(",") if name]
+        usernames = [name.strip() for name in value.split(",") if name.strip()]
         if usernames:
             all_users = User.objects.filter(
                 Q(username__in=usernames) | Q(profile__name__in=usernames)
