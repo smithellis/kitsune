@@ -45,6 +45,14 @@ def product_landing(request, slug):
             latest_version = versions[0].min_version
         else:
             latest_version = 0
+    topics = topics_for(request.user, product=product, parent=None)
+    # Create a dictionary of topics and their three most popular documents
+    documents = {}
+    for topic in topics:
+        docs, _ = documents_for(
+            request.user, request.LANGUAGE_CODE, topics=[topic], products=[product]
+        )
+        documents[topic] = docs[:3]
 
     return render(
         request,
@@ -57,6 +65,7 @@ def product_landing(request, slug):
             "latest_version": latest_version,
             "featured": get_featured_articles(product, locale=request.LANGUAGE_CODE),
             "has_aaq_config": has_aaq_config(product),
+            "documents": documents,
         },
     )
 
