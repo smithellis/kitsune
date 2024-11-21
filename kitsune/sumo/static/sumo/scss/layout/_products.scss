@@ -32,3 +32,94 @@
     margin: 0 p.$spacing-xs;
   }
 }
+
+
+// SCSS for Topics Section Layout
+
+.topics-section {
+  padding: 40px 20px; // Add more padding for spacing between content
+  h2 {
+    font-size: 24px;
+    margin-bottom: 30px; // Increase the bottom margin for better spacing
+    color: #333;
+  }
+}
+
+
+.topics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr); // Three columns
+  gap: 20px;
+}
+
+.topic-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
+
+  .topic-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 16px;
+
+    .card--icon {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+    }
+
+    h3 {
+      font-family: Inter;
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0;
+      line-height: 1.2;
+      flex-grow: 1;
+    }
+  }
+
+  .article-list {
+    flex-grow: 1;
+    margin: 0 0 16px;
+    padding: 0;
+    list-style: none;
+
+    li {
+      margin-bottom: 8px;
+      line-height: 1.5;
+
+      a {
+        color: black;
+        font-size: 14px;
+        text-decoration: underline;
+
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+    }
+  }
+
+  .view-all-link {
+    border-top: 1px solid #ddd;
+    padding-top: 10px;
+    margin-top: 16px;
+    display: inline-block;
+    font-size: 14px;
+    color: #000000;
+    text-decoration: none;
+    font-weight: 600;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}

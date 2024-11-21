@@ -1,3 +1,41 @@
+{% macro help_topics_extended(topics, documents, product_slug=None, new_tab=False) -%}
+<div class="topics-section">
+  <h2>Topics</h2>
+  <div class="topics-grid">
+    {% for topic in topics %}
+    <div class="topic-card">
+      <div class="topic-header">
+        <img
+          class="card--icon"
+          src="{{ topic.image_url }}"
+          alt="{{ pgettext('DB: products.Topic.title', topic.title) }} icon"
+        />
+          <h3 class="card--title">
+            <a class="expand-this-link" href="{{ topic_url }}" data-on-hover="{{ _('See all') }}" {% if new_tab %} target="_blank" {% endif %}
+              data-event-name="link_click"
+              data-event-parameters='{
+                "link_name": "product-and-topic-home",
+                "link_detail": "{{ (product_slug or product.slug) + '/' + topic.slug }}"
+              }'>
+              {{ pgettext('DB: products.Topic.title', topic.title) }}
+            </a>
+          </h3>
+      </div>
+      <ul class="article-list">
+        {% for document in documents[topic] %}
+        <li>
+          <a href="{{ document.url }}">      
+          {{ document.document_title }}</a>
+        </li>
+        {% endfor %}
+      </ul>
+      <a class="view-all-link" href="{{ topic_url }}">View All {{ topic.total_articles }} Articles</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{%- endmacro %}
+
 {% macro help_topics(topics, product_slug=None, new_tab=False) -%}
   <div class="sumo-card-grid">
     <div class="scroll-wrap">
