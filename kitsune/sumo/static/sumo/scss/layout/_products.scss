@@ -37,13 +37,14 @@
 // SCSS for Topics Section Layout
 
 .topics-section {
-  padding: 20px;
+  padding: 40px 20px; // Add more padding for spacing between content
   h2 {
     font-size: 24px;
-    margin-bottom: 20px;
+    margin-bottom: 30px; // Increase the bottom margin for better spacing
     color: #333;
   }
 }
+
 
 .topics-grid {
   display: flex;
@@ -63,40 +64,47 @@
 
   .topic-header {
     display: flex;
-    align-items: center;
+    align-items: center;  // Ensures vertical alignment
     gap: 10px;
     margin-bottom: 16px;
-
+  
     input[type="checkbox"] {
-      transform: scale(1.2);
-    }
-
-    h3 {
-      font-size: 18px;
-      font-weight: 800;
       margin: 0;
+      transform: scale(1.2); // Increase size slightly for better visibility
+      color: grey;
+    }
+  
+    h3 {
+      font-family: Inter;
+      font-size: 18px; // Increase font size slightly to better match the screenshot
+      font-weight: 700;
+      margin: 0;
+      line-height: 1.2;
     }
   }
+  
 
   .article-list {
     margin: 0 0 16px;
     padding: 0;
     list-style: none;
-
+  
     li {
       margin-bottom: 8px;
-
+      line-height: 1.5;
+  
       a {
-        color: #000000;
-        text-decoration: none;
-
+        color: black;
+        font-size: 14px;
+        text-decoration: underline;
+  
         &:hover {
           text-decoration: underline;
         }
       }
     }
   }
-
+  
   .view-all-link {
     display: inline-block;
     margin-top: 10px;
