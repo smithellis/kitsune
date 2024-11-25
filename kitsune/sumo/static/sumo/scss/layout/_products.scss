@@ -57,26 +57,30 @@
   background-color: #fff;
   border: 1px solid #ddd;
   border-radius: 8px;
-  padding: 16px;
+  padding: 16px 16px 16px 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   width: calc(33% - 20px); // Adjust for 3 columns with spacing
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-height: 200px; // Add minimum height to ensure consistent appearance
 
   .topic-header {
     display: flex;
     align-items: center;  // Ensures vertical alignment
-    gap: 10px;
+    gap: 16px;
     margin-bottom: 16px;
   
     input[type="checkbox"] {
       margin: 0;
       transform: scale(1.2); // Increase size slightly for better visibility
-      color: grey;
+      background-color: #808080;
     }
   
     h3 {
       font-family: Inter;
-      font-size: 18px; // Increase font size slightly to better match the screenshot
+      font-size: 16px; // Increase font size slightly to better match the screenshot
       font-weight: 700;
       margin: 0;
       line-height: 1.2;
@@ -85,9 +89,11 @@
   
 
   .article-list {
-    margin: 0 0 16px;
+    margin: 0;
     padding: 0;
+    font-size: 16px;
     list-style: none;
+    flex-grow: 1; // Allow list to take up available space
   
     li {
       margin-bottom: 8px;
@@ -99,22 +105,21 @@
         text-decoration: underline;
   
         &:hover {
-          text-decoration: underline;
+          text-decoration: none;
         }
       }
     }
   }
   
   .view-all-link {
-    display: inline-block;
-    margin-top: 10px;
+    margin-top: auto;
     font-size: 14px;
     color: #000000;
     text-decoration: none;
-    font-weight: 600;
+    text-decoration: underline;
 
     &:hover {
-      text-decoration: underline;
+      text-decoration: none;
     }
   }
 }

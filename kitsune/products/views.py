@@ -48,11 +48,13 @@ def product_landing(request, slug):
     topics = topics_for(request.user, product=product, parent=None)
     # Create a dictionary of topics and their three most popular documents
     documents = {}
+    topic_counts = {}
     for topic in topics:
         docs, _ = documents_for(
             request.user, request.LANGUAGE_CODE, topics=[topic], products=[product]
         )
         documents[topic] = docs[:3]
+        topic_counts[topic] = len(docs)
 
     return render(
         request,
@@ -66,6 +68,7 @@ def product_landing(request, slug):
             "featured": get_featured_articles(product, locale=request.LANGUAGE_CODE),
             "has_aaq_config": has_aaq_config(product),
             "documents": documents,
+            "topic_counts": topic_counts,
         },
     )
 

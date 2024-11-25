@@ -16,7 +16,7 @@
         </li>
         {% endfor %}
       </ul>
-      <a class="view-all-link" href="{{ topic_url }}">View All {{ topic.total_articles }} Articles</a>
+      <a class="view-all-link" href="{{ topic_url }}">View All {{ topic_counts[topic] }} Articles</a>
     </div>
     {% endfor %}
   </div>
