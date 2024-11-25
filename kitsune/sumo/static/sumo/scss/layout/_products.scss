@@ -68,14 +68,23 @@
 
   .topic-header {
     display: flex;
-    align-items: center;  // Ensures vertical alignment
+    align-items: center;
     gap: 16px;
     margin-bottom: 16px;
   
     input[type="checkbox"] {
-      margin: 0;
-      transform: scale(1.2); // Increase size slightly for better visibility
-      background-color: #808080;
+      flex: 0 0 18px;
+      width: 18px;
+      height: 18px;
+      appearance: none;
+      -webkit-appearance: none;
+      background-color: #CCCCCC;
+      border: none;
+      border-radius: 2px;
+
+      &:checked {
+        background-color: #CCCCCC;
+      }
     }
   
     h3 {
