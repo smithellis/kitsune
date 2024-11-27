@@ -1,0 +1,211 @@
+// Variables
+$button-size: 40px;
+$button-icon-size: 20px;
+$spacing-small: 16px;
+$spacing-medium: 20px;
+$spacing-large: 64px;
+$carousel-width: 984px;
+$primary-inverse-color: #FFF;
+
+.carousel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(92deg, #E7DEEE 0.36%, #D1BEDD 100%);
+    width: 100vw;
+    margin-left: calc(-50vw + 50%);
+    margin-right: calc(-50vw + 50%);
+    position: relative;
+
+    .container-top {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        padding: 40px 24px 0 24px;
+        max-width: 100%;
+        justify-content: center;
+        margin-bottom: 0;
+
+        // Create a contained area for the content
+        > * {
+            max-width: $carousel-width;
+            margin: 0 auto;
+        }
+    }
+
+    .container-bottom {
+        width: 100%;
+        padding: 24px 24px 40px 24px;
+        position: relative;
+        max-width: 100%;
+        display: flex;
+        justify-content: center;
+
+        .item-text-container {
+            width: $carousel-width;
+            margin: 0;
+            display: flex;
+            justify-content: flex-start;
+        }
+    }
+
+    // Button Styles
+    .previous-button,
+    .next-button {
+        cursor: pointer;
+        border-radius: 50%;
+        border: 2px solid $primary-inverse-color;
+        background: #000;
+        width: $button-size;
+        height: $button-size;
+        min-width: $button-size;
+        min-height: $button-size;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        box-sizing: border-box;
+
+        img {
+            width: $button-icon-size;
+            height: $button-icon-size;
+        }
+    }
+
+    // Static Items
+    .static-item-image {
+        margin-left: $spacing-large;
+        margin-right: $spacing-small;
+    }
+
+    .static-item-text {
+        font-size: 24px;
+        font-weight: 700;
+        color: #000;
+        margin: 0 24px 0 0;
+        padding: 0;
+        white-space: nowrap;
+    }
+
+    // Dynamic Content
+    .dynamic-title-container {
+        display: flex;
+        align-items: center;
+        flex: 1;
+        margin: 0;
+        padding: 0;
+    }
+
+    .dynamic-title {
+        font-size: 16px;
+        color: rgba(0, 0, 0, 0.40);
+        cursor: pointer;
+        flex: 0 0 auto;
+        opacity: 0.5;
+        transition: opacity 0.3s ease;
+        margin: 0 56px 0 0;
+        padding: 0;
+        white-space: nowrap;
+        line-height: 24px;
+
+        &:last-child {
+            margin-right: 0;
+        }
+
+        &.active {
+            font-size: 24px;
+            font-weight: bold;
+            opacity: 1;
+            line-height: 24px;
+        }
+    }
+
+    .item-text {
+        font-size: 16px;
+        font-weight: 400;
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        display: none;
+        margin: 0;
+
+        &.active {
+            opacity: 1;
+            display: block;
+        }
+    }
+
+    // Responsive Design
+    @media (max-width: 768px) {
+        padding: 32px 24px;
+        min-height: 100%;
+        position: relative;
+
+        .container-top {
+            flex-wrap: wrap;
+            padding: 0;
+        }
+
+        .container-bottom {
+            padding: 24px 0 88px 0;
+            
+            .item-text-container {
+                width: 100%;
+                padding: 0 24px;
+            }
+        }
+
+        .static-item-image {
+            margin: 0 $spacing-small 32px 0;
+        }
+
+        .static-item-text {
+            margin: 0 0 32px 0;
+        }
+
+        .dynamic-title-container {
+            width: 100%;
+            margin-bottom: 24px;
+        }
+
+        .previous-button,
+        .next-button {
+            position: absolute;
+            bottom: 32px;
+            margin: 0;
+        }
+
+        .previous-button {
+            left: calc(50% - 40px);
+            transform: translateX(-100%);
+        }
+
+        .next-button {
+            right: calc(50% - 40px);
+            transform: translateX(100%);
+        }
+
+        .dynamic-title {
+            font-size: 16px;
+            font-weight: 400;
+            opacity: 0.4;
+            line-height: normal;
+
+            &.active {
+                font-size: 16px;
+                font-weight: 700;
+                opacity: 1;
+                color: #000;
+                line-height: normal;
+            }
+        }
+
+        .item-text {
+            margin-left: 0;
+        }
+    }
+}

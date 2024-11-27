@@ -996,3 +996,36 @@
   </div>
 </div>
 {% endmacro %}
+
+{% macro carousel(slides) %}
+    <section class="carousel">
+        <div class="container-top">
+            <!-- Left Section -->
+                <div class="previous-button" aria-label="Previous Slide">
+                    <img src="{{ webpack_static('sumo/img/previous-arrow.svg') }}" alt="Previous">
+                </div>
+            <!-- Static items container -->
+                <div class="static-item-image">
+                    <img src="{{ webpack_static('sumo/img/release-notes.svg') }}" alt="Release Notes">
+                </div>
+            <!-- Center Section -->
+                <h1 class="static-item-text">Announcements</h1>
+                <div class="dynamic-title-container">
+                {% for slide in slides %}
+                    <div class="dynamic-title {% if loop.first %}active{% endif %}">{{ slide.title }}</div>
+                {% endfor %}
+                </div>
+            <!-- Right Section -->
+                <div class="next-button" aria-label="Next Slide">
+                    <img src="{{ webpack_static('sumo/img/next-arrow.svg') }}" alt="Next">
+                </div>
+        </div>
+        <div class="container-bottom">
+            <div class="item-text-container">
+            {% for slide in slides %}
+                <div class="item-text {% if loop.first %}active{% endif %}">{{ slide.description }}</div>
+            {% endfor %}
+            </div>
+        </div>
+    </section>
+{% endmacro %}

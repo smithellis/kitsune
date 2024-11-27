@@ -1,4 +1,4 @@
-{% from 'includes/common_macros.html' import announcement_bar, search_box, aux_nav, profile_nav, download_firefox, field, checkbox, favicon with context %}
+{% from 'includes/common_macros.html' import announcement_bar, search_box, carousel, aux_nav, profile_nav, download_firefox, field, checkbox, favicon with context %}
 
 {% if request.LANGUAGE_CODE == 'xx' %}
   {% set meta = [('robots', 'noindex')] %}
@@ -188,6 +188,11 @@
 {% block masthead %}
 {% endblock %}
 
+<div class="sumo-page-section">
+  {{ carousel(get_slides(request)) }}
+</div>
+
+
 {% if messages %}
   <ul class="user-messages">
     {% for message in messages %}
@@ -228,6 +233,8 @@
   {% block below_main %}{% endblock %}
 </div>
 {% endblock %}
+
+
 
 <footer class="mzp-c-footer">
   <div class="mzp-l-content">
