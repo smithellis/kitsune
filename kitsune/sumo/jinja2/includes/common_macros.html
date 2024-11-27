@@ -996,3 +996,32 @@
   </div>
 </div>
 {% endmacro %}
+
+{% macro carousel(slides) %}
+<div class="carousel">
+    <button class="carousel-nav-button prev" aria-label="Previous">
+        <span class="icon">&larr;</span>
+    </button>
+    <div class="carousel-content">
+        <div class="carousel-track">
+            {% for slide in slides %}
+            <div class="carousel-slide">
+                <div class="carousel-icon">
+                    <img src="{{ slide.icon }}" alt="{{ slide.icon_alt }}">
+                </div>
+                <div class="carousel-text">
+                    <h2 class="carousel-title">{{ slide.title }}</h2>
+                    <p class="carousel-description">{{ slide.description }}</p>
+                    {% if slide.link %}
+                    <a href="{{ slide.link.url }}" class="carousel-link">{{ slide.link.text }}</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    <button class="carousel-nav-button next" aria-label="Next">
+        <span class="icon">&rarr;</span>
+    </button>
+</div>
+{% endmacro %}

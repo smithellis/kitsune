@@ -1,4 +1,4 @@
-{% from 'includes/common_macros.html' import announcement_bar, search_box, aux_nav, profile_nav, download_firefox, field, checkbox, favicon with context %}
+{% from 'includes/common_macros.html' import announcement_bar, search_box, carousel, aux_nav, profile_nav, download_firefox, field, checkbox, favicon with context %}
 
 {% if request.LANGUAGE_CODE == 'xx' %}
   {% set meta = [('robots', 'noindex')] %}
@@ -220,7 +220,8 @@
       </aside>
       {% endblock %}
       <main role="main" class="sumo-l-two-col--main">
-      {% block above_main %}{% endblock %}
+      {% block above_main %}
+      {% endblock %}
       {% block content %}{% endblock %}
       </main>
     </div>
