@@ -188,6 +188,8 @@
 {% block masthead %}
 {% endblock %}
 
+{{ carousel(get_slides(request)) }}
+
 {% if messages %}
   <ul class="user-messages">
     {% for message in messages %}
@@ -220,8 +222,7 @@
       </aside>
       {% endblock %}
       <main role="main" class="sumo-l-two-col--main">
-      {% block above_main %}
-      {% endblock %}
+      {% block above_main %}{% endblock %}
       {% block content %}{% endblock %}
       </main>
     </div>
@@ -229,6 +230,8 @@
   {% block below_main %}{% endblock %}
 </div>
 {% endblock %}
+
+
 
 <footer class="mzp-c-footer">
   <div class="mzp-l-content">
