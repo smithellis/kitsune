@@ -1,4 +1,4 @@
-{% from 'includes/common_macros.html' import announcement_bar, search_box, aux_nav, profile_nav, download_firefox, field, checkbox, favicon with context %}
+{% from 'includes/common_macros.html' import announcement_bar, carousel_banner, search_box, aux_nav, profile_nav, download_firefox, field, checkbox, favicon with context %}
 
 {% if request.LANGUAGE_CODE == 'xx' %}
   {% set meta = [('robots', 'noindex')] %}
@@ -204,6 +204,8 @@
     {% endfor %}
   </ul>
 {% endif %}
+
+{{ carousel_banner() }}
 
 {% block contentwrap %}
 <div class="mzp-l-content {% block base_container_classes %}{% endblock %}" id="main-content">

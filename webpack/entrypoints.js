@@ -6,6 +6,7 @@ const entrypoints = {
     "sumo/js/main.js",
     "sumo/js/htmx.js",
     "sumo/js/alpine.js",
+    "sumo/js/carousel-banner.js",
     "sumo/js/geoip-locale.js",
     "sumo/js/ui.js",
     "sumo/js/analytics.js",

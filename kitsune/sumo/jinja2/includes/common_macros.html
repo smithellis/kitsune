@@ -996,3 +996,61 @@
   </div>
 </div>
 {% endmacro %}
+
+{% macro carousel_banner(slides) %}
+    <section class="carousel" 
+           x-data="{ 
+             currentIndex: 0,
+             slides: [
+               { title: 'Firefox 126 Release', text: 'Firefox version 126 is live! Learn about what\'s changed and how you can help support the new release.' },
+               { title: '2024 Contributor Survey', text: 'Help us improve Mozilla Support by taking our annual contributor survey.' },
+               { title: 'Mozilla Hubs Sunset', text: 'Important information about the upcoming changes to Mozilla Hubs.' }
+             ],
+             next() {
+               this.currentIndex = (this.currentIndex + 1) % this.slides.length;
+             },
+             previous() {
+               this.currentIndex = (this.currentIndex - 1 + this.slides.length) % this.slides.length;
+             },
+             goToSlide(index) {
+               this.currentIndex = index;
+             }
+           }">
+
+        <div class="previous-button" @click="previous()" aria-label="Previous Slide">
+            <img src="{{ webpack_static('sumo/img/previous-arrow.svg') }}" alt="Previous">
+        </div>
+        <div class="main-container">
+        <div class="container-top">
+            <div class="static-item-image">
+                <img src="{{ webpack_static('sumo/img/release-notes.svg') }}" alt="Release Notes">
+            </div>
+            <h1 class="static-item-text">Announcements</h1>
+            <div class="dynamic-title-container">
+                <template x-for="(slide, index) in slides" :key="index">
+                    <div class="dynamic-title" 
+                         :class="{ 'active': currentIndex === index }"
+                         @click="goToSlide(index)"
+                         x-text="slide.title"
+                         x-show.important="true">
+                    </div>
+                </template>
+            </div>
+        </div>
+        <div class="container-bottom">
+            <div class="item-text-container">
+                <template x-for="(slide, index) in slides" :key="index">
+                    <div class="item-text"
+                         :class="{ 'active': currentIndex === index }"
+                         x-text="slide.text"
+                         x-show.important="true">
+                    </div>
+                </template>
+            </div>
+        </div>
+        </div>
+        <div class="next-button" @click="next()" aria-label="Next Slide">
+            <img src="{{ webpack_static('sumo/img/next-arrow.svg') }}" alt="Next">
+        </div>
+    </section>
+{% endmacro %}
