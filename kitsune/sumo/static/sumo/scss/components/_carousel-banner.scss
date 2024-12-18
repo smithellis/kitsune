@@ -29,8 +29,8 @@
       flex-direction: column;
       max-width: var(--carousel-width);
       width: 100%;
-      padding: 40px 24px;
       margin: 0 auto;
+      padding: 40px 24px;
       position: relative;
       overflow: hidden;
     }
@@ -39,6 +39,79 @@
       display: flex;
       align-items: center;
       width: 100%;
+    }
+  
+    .dynamic-title-container {
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+  
+    .dynamic-title {
+      font-size: 16px;
+      color: rgba(0, 0, 0, 0.40);
+      cursor: pointer;
+      white-space: nowrap;
+      margin-right: 56px;
+      flex: 0 1 auto;
+      min-width: 0;
+      transition: all 0.3s ease;
+  
+      &:last-child {
+        margin-right: 0;
+      }
+  
+      &.active {
+        font-size: 24px;
+        font-weight: bold;
+        opacity: 1;
+        color: #000;
+      }
+  
+      &.position-1 {
+        transform: translateX(0);
+      }
+  
+      &.position-2 {
+        transform: translateX(200px);
+      }
+  
+      &.position-3 {
+        transform: translateX(400px);
+      }
+    }
+  
+    %button-shared {
+      width: 40px;
+      height: 40px;
+      min-width: 40px;
+      min-height: 40px;
+      border-radius: 50%;
+      border: 3px solid var(--primary-inverse-color);
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      cursor: pointer;
+      position: absolute;
+      top: 56px;
+      z-index: 1;
+  
+      img {
+        width: 20px;
+        height: 20px;
+      }
+    }
+  
+    .previous-button {
+      @extend %button-shared;
+      left: calc((100% - var(--carousel-width)) / 2 - 64px);
+    }
+  
+    .next-button {
+      @extend %button-shared;
+      right: calc((100% - var(--carousel-width)) / 2 - 64px);
     }
   
     .static-item-image {
@@ -57,43 +130,6 @@
         height: 100%;
         object-fit: contain;
       }
-    }
-  
-    .previous-button,
-    .next-button {
-      width: 40px;
-      height: 40px;
-      min-width: 40px;
-      min-height: 40px;
-      border-radius: 50%;
-      border: 2px solid var(--primary-inverse-color);
-      background: #000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0;
-      cursor: pointer;
-  
-      img {
-        width: 20px;
-        height: 20px;
-      }
-    }
-  
-    .previous-button {
-      position: absolute;
-      left: calc((100% - var(--carousel-width)) / 2 - 64px);
-      top: 50%;
-      transform: translateY(-50%);
-      z-index: 1;
-    }
-  
-    .next-button {
-      position: absolute;
-      right: calc((100% - var(--carousel-width)) / 2 - 64px);
-      top: 50%;
-      transform: translateY(-50%);
-      z-index: 1;
     }
   
     &-bottom {
@@ -122,9 +158,8 @@
   
       .previous-button,
       .next-button {
-        position: absolute;
-        bottom: 32px;
         top: auto;
+        bottom: 32px;
         transform: none;
       }
   

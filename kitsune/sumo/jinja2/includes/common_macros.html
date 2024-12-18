@@ -1006,14 +1006,19 @@
                { title: '2024 Contributor Survey', text: 'Help us improve Mozilla Support by taking our annual contributor survey.' },
                { title: 'Mozilla Hubs Sunset', text: 'Important information about the upcoming changes to Mozilla Hubs.' }
              ],
+             slideOrder: [0, 1, 2],
              next() {
-               this.currentIndex = (this.currentIndex + 1) % this.slides.length;
+               this.slideOrder = [...this.slideOrder.slice(1), this.slideOrder[0]];
+               this.currentIndex = this.slideOrder[0];
              },
              previous() {
-               this.currentIndex = (this.currentIndex - 1 + this.slides.length) % this.slides.length;
+               this.slideOrder = [this.slideOrder[this.slideOrder.length - 1], ...this.slideOrder.slice(0, -1)];
+               this.currentIndex = this.slideOrder[0];
              },
              goToSlide(index) {
-               this.currentIndex = index;
+               while (this.slideOrder[0] !== index) {
+                 this.next();
+               }
              }
            }">
 
@@ -1021,33 +1026,39 @@
             <img src="{{ webpack_static('sumo/img/previous-arrow.svg') }}" alt="Previous">
         </div>
         <div class="main-container">
-        <div class="container-top">
-            <div class="static-item-image">
-                <img src="{{ webpack_static('sumo/img/release-notes.svg') }}" alt="Release Notes">
+            <div class="container-top">
+                <div class="static-item-image">
+                    <img src="{{ webpack_static('sumo/img/release-notes.svg') }}" alt="Release Notes">
+                </div>
+                <h1 class="static-item-text">Announcements</h1>
+                <div class="dynamic-title-container">
+                    <template x-for="position in [0, 1, 2]">
+                        <div class="dynamic-title" 
+                             :class="{ 
+                                'active': slideOrder[position] === currentIndex,
+                                'position-1': position === 0,
+                                'position-2': position === 1,
+                                'position-3': position === 2
+                             }"
+                             @click="goToSlide(slideOrder[position])"
+                             x-text="slides[slideOrder[position]].title"
+                             :style="`transform: translateX(${position * 200}px); transition: transform 0.3s ease-in-out;`">
+                        </div>
+                    </template>
+                </div>
             </div>
-            <h1 class="static-item-text">Announcements</h1>
-            <div class="dynamic-title-container">
-                <template x-for="(slide, index) in slides" :key="index">
-                    <div class="dynamic-title" 
-                         :class="{ 'active': currentIndex === index }"
-                         @click="goToSlide(index)"
-                         x-text="slide.title"
-                         x-show.important="true">
-                    </div>
-                </template>
+            <div class="container-bottom">
+                <div class="item-text-container">
+                    <template x-for="(slide, index) in slides" :key="index">
+                        <div class="item-text"
+                             :class="{ 'active': currentIndex === index }"
+                             x-text="slide.text"
+                             x-show.important="currentIndex === index"
+                             x-transition>
+                        </div>
+                    </template>
+                </div>
             </div>
-        </div>
-        <div class="container-bottom">
-            <div class="item-text-container">
-                <template x-for="(slide, index) in slides" :key="index">
-                    <div class="item-text"
-                         :class="{ 'active': currentIndex === index }"
-                         x-text="slide.text"
-                         x-show.important="true">
-                    </div>
-                </template>
-            </div>
-        </div>
         </div>
         <div class="next-button" @click="next()" aria-label="Next Slide">
             <img src="{{ webpack_static('sumo/img/next-arrow.svg') }}" alt="Next">
