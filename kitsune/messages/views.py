@@ -29,6 +29,11 @@ def inbox(request):
 
     messages = paginate(request, messages, per_page=MESSAGES_PER_PAGE, count=count)
 
+    # Add is_bot_user flag to each message's sender
+    for message in messages.object_list:
+        if message.sender:
+            message.sender.is_bot_user = message.sender.username == settings.SUMO_BOT_USERNAME
+
     return render(
         request,
         "messages/inbox.html",
@@ -42,12 +47,19 @@ def read(request, msgid):
     was_new = message.unread
     if was_new:
         message.update(read=True)
+    if message.sender.username == settings.SUMO_BOT_USERNAME:
+        message.sender.is_bot_user = True
+
     initial = {"to": message.sender, "in_reply_to": message.pk}
     form = ReplyForm(initial=initial)
     response = render(
         request,
         "messages/read.html",
-        {"message": message, "form": form, "default_avatar": settings.DEFAULT_AVATAR},
+        {
+            "message": message,
+            "form": form,
+            "default_avatar": settings.DEFAULT_AVATAR,
+        },
     )
     return response
 
@@ -55,12 +67,18 @@ def read(request, msgid):
 @login_required
 def read_outbox(request, msgid):
     message = get_object_or_404(OutboxMessage, pk=msgid, sender=request.user)
+    to_users = message.to.all()
+
+    # Add is_bot_user flag to each recipient
+    for user in to_users:
+        user.is_bot_user = user.username == settings.SUMO_BOT_USERNAME
+
     return render(
         request,
         "messages/read-outbox.html",
         {
             "message": _add_recipients(message),
-            "to_users": message.to.all(),
+            "to_users": to_users,
             "to_groups": message.to_group.all(),
         },
     )
@@ -179,12 +197,36 @@ def preview_async(request):
 
 
 def _add_recipients(msg):
+    """Process and attach recipient information to a message object.
+
+    This helper function calculates recipient counts and assigns recipient-related
+    attributes to the message object for both individual users and groups.
+
+    Args:
+        msg: An OutboxMessage object to process.
+
+    Returns:
+        The modified message object with the following attributes set:
+            - recipients_count: Number of individual recipients
+            - to_groups_count: Number of group recipients
+            - recipient: The single recipient (if exactly one), else None
+            - recipient.is_bot_user: Boolean indicating if recipient is SumoBot
+            - to_groups: List of recipient groups with prefetched profiles
+
+    Note:
+        The function assumes msg.to and msg.to_group are valid related fields
+        on the message object.
+    """
     # Set the counts based on the lists
     msg.recipients_count = msg.to.all().count()
     msg.to_groups_count = msg.to_group.all().count()
 
     # Assign the recipient based on the number of recipients
     msg.recipient = msg.to.all()[0] if msg.recipients_count == 1 else None
+
+    # Set is_bot_user flag only if there's a recipient with a username
+    if msg.recipient and hasattr(msg.recipient, "username"):
+        msg.recipient.is_bot_user = msg.recipient.username == settings.SUMO_BOT_USERNAME
 
     # Assign the group(s) based on the number of groups
     msg.to_groups = list(msg.to_group.prefetch_related("profile"))
