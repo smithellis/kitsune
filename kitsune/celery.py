@@ -8,6 +8,8 @@ from django.conf import settings  # noqa
 app = Celery("kitsune")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
+
+# Configure task routes
 app.conf.task_routes = {
     "post_office.tasks.send_queued_mail": {"queue": "email"},
     "kitsune.tidings.tasks.send_emails": {"queue": "email"},
@@ -17,3 +19,6 @@ app.conf.task_routes = {
     "kitsune.wiki.tasks.send_reviewed_notification": {"queue": "email"},
     "kitsune.wiki.tasks.send_contributor_notification": {"queue": "email"},
 }
+
+# Configure Celery Beat schedules
+app.conf.beat_schedule = settings.CELERY_BEAT_SCHEDULE
