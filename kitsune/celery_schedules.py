@@ -8,6 +8,7 @@ from kitsune.tasks import (
     cleanup_old_account_events,
     cohort_analysis,
     enqueue_lag_monitor_task,
+    fix_current_revisions,
     generate_missing_share_links,
     rebuild_kb,
     reload_question_traffic_stats,
@@ -141,5 +142,10 @@ CELERY_BEAT_SCHEDULE = {
     "cleanup-expired-users": {
         "task": cleanup_expired_users.name,
         "schedule": crontab(hour="03", minute="00", day_of_week="0"),
+    },
+    # Every Sunday at 00:00
+    "fix-current-revisions": {
+        "task": fix_current_revisions.name,
+        "schedule": crontab(hour="00", minute="00", day_of_week="0"),
     },
 }
