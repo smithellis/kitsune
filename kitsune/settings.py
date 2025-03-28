@@ -900,6 +900,19 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
 
+# Additional Celery settings
+CELERY_TASK_IGNORE_RESULT = config("CELERY_TASK_IGNORE_RESULT", default=True, cast=bool)
+CELERY_TASK_ALWAYS_EAGER = config(
+    "CELERY_TASK_ALWAYS_EAGER", default=DEBUG, cast=bool
+)  # For tests. Set to False for use.
+CELERY_WORKER_CONCURRENCY = config("CELERY_WORKER_CONCURRENCY", default=4, cast=int)
+CELERY_TASK_EAGER_PROPAGATES = config(
+    "CELERY_TASK_EAGER_PROPAGATES", default=True, cast=bool
+)  # Explode loudly during tests.
+CELERY_WORKER_HIJACK_ROOT_LOGGER = config(
+    "CELERY_WORKER_HIJACK_ROOT_LOGGER", default=False, cast=bool
+)
+
 # Celery Beat Configuration
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
