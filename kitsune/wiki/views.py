@@ -144,13 +144,45 @@ def document(request, document_slug, document=None):
             patch_vary_headers(response, ["accept-language"])
         return response
 
-    doc = get_visible_document_or_404(
-        request.user,
-        locale=request.LANGUAGE_CODE,
-        slug=document_slug,
-        look_for_translation_via_parent=True,
-        return_parent_if_no_translation=True,
-    )
+    # Get the redirect_url_fragment and source_locale query params if present
+    # These will be present if the user is coming from the language switcher
+    redirect_url_fragment = request.GET.get("redirect_url_fragment", "")
+    source_locale = request.GET.get("source_locale", "")
+
+    try:
+        doc = get_visible_document_or_404(
+            request.user,
+            locale=request.LANGUAGE_CODE,
+            slug=document_slug,
+            look_for_translation_via_parent=True,
+            return_parent_if_no_translation=True,
+        )
+    except Http404:
+        # If we're coming from a language switcher (indicated by source_locale),
+        # try to find an equivalent document in this locale
+        if source_locale:
+            equivalent_doc = find_equivalent_document(
+                request.user, document_slug, source_locale, request.LANGUAGE_CODE
+            )
+            if equivalent_doc:
+                # Redirect to the equivalent document, preserving only essential query parameters
+                # and dropping any additional path segments
+                url = equivalent_doc.get_absolute_url()
+                query_dict = request.GET.copy()
+
+                # Remove the params we don't need to forward
+                if "redirect_url_fragment" in query_dict:
+                    del query_dict["redirect_url_fragment"]
+                if "source_locale" in query_dict:
+                    del query_dict["source_locale"]
+
+                # Add any URL fragment that was in the original URL
+                url = urlparams(url, query_dict=query_dict)
+                if redirect_url_fragment:
+                    url = f"{url}#{redirect_url_fragment}"
+                return HttpResponseRedirect(url)
+        # If we couldn't find an equivalent document, re-raise the 404
+        raise
 
     if doc.slug != document_slug:
         # We've found the translation at a different slug.
@@ -1833,3 +1865,49 @@ def pocket_article(request, article_id=None, document_slug=None, extra_path=None
         _("Sorry, that article wasn't found."),
     )
     return redirect(product_landing, slug="pocket", permanent=True)
+
+
+def find_equivalent_document(user, document_slug, source_locale, target_locale):
+    """
+    Find the equivalent document in the target locale for a document with the given slug
+    in the source locale.
+
+    This handles the case where a document's slug may be different between locales.
+
+    Returns the Document object if found, or None if no equivalent document exists.
+    """
+    # First try the exact same slug in the target locale
+    try:
+        doc = Document.objects.get_visible(user, locale=target_locale, slug=document_slug)
+        return doc
+    except Document.DoesNotExist:
+        pass
+
+    # If that doesn't work, look for a translation relationship
+    try:
+        # Find the source document
+        source_doc = Document.objects.get_visible(user, locale=source_locale, slug=document_slug)
+
+        # If this is a translation, use its parent to find other translations
+        if source_doc.parent:
+            parent_doc = source_doc.parent
+
+            # If target is default language, return the parent document
+            if target_locale == settings.WIKI_DEFAULT_LANGUAGE:
+                return parent_doc
+
+            # If target is another locale, look for translation in that locale
+            translation = parent_doc.translated_to(target_locale, visible_for_user=user)
+            if translation:
+                return translation
+
+        # If this is a parent document, look for its translation in target locale
+        elif target_locale != settings.WIKI_DEFAULT_LANGUAGE:
+            translation = source_doc.translated_to(target_locale, visible_for_user=user)
+            if translation:
+                return translation
+    except Document.DoesNotExist:
+        pass
+
+    # No equivalent document found
+    return None
