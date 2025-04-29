@@ -11,9 +11,11 @@ from kitsune.search.base import SumoDocument
 
 
 @override_settings(ES_LIVE_INDEXING=False)
-class IndexObjectsBulkTestCase(ElasticTestCase):
+class ES8IndexObjectsBulkTestCase(ElasticTestCase):
     def test_delete_not_found_not_raised(self):
         q_id = QuestionFactory(is_spam=True).id
+        # Force ES index refresh before testing to ensure consistency
+        QuestionDocument._index.refresh()
         index_objects_bulk("QuestionDocument", [q_id])
 
     @patch("kitsune.search.documents.QuestionDocument.to_action", autospec=True)
@@ -45,11 +47,17 @@ class IndexObjectsBulkTestCase(ElasticTestCase):
         for question_id in ids:
             question = Question.objects.get(id=question_id)
             AnswerFactory(question=question, content=f"answer {question_id}")
+            
+        # Force ES index refresh before testing
+        QuestionDocument._index.refresh()
 
         with self.assertRaises(BulkIndexError):
             index_objects_bulk("QuestionDocument", ids, elastic_chunk_size=1)
 
+        # Give ES time to process
+        QuestionDocument._index.refresh()
+        
         try:
             QuestionDocument.get(id_without_exception)
         except NotFoundError:
-            self.fail("Couldn't get question, so later chunks weren't sent.")
+            self.fail("Couldn't get question, so later chunks weren't sent.") 

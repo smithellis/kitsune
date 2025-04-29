@@ -10,11 +10,11 @@ from django.core.paginator import Paginator as DjPaginator
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from elasticsearch.exceptions import NotFoundError, RequestError
-from elasticsearch_dsl import Document as DSLDocument
-from elasticsearch_dsl import InnerDoc, MetaField
-from elasticsearch_dsl import Search as DSLSearch
-from elasticsearch_dsl import field
-from elasticsearch_dsl.utils import AttrDict
+from elasticsearch.dsl import Document as DSLDocument
+from elasticsearch.dsl import InnerDoc, MetaField
+from elasticsearch.dsl import Search as DSLSearch
+from elasticsearch.dsl import field
+from elasticsearch.dsl.utils import AttrDict
 from pyparsing import ParseException
 
 from kitsune.search.config import (
@@ -70,7 +70,7 @@ class SumoDocument(DSLDocument):
     @classmethod
     def search(cls, **kwargs):
         """
-        Create an `elasticsearch_dsl.Search` instance that will search over this `Document`.
+        Create an `elasticsearch.dsl.Search` instance that will search over this `Document`.
 
         If no `index` kwarg is supplied, use the Document's Index's `read_alias`.
         """
@@ -95,17 +95,45 @@ class SumoDocument(DSLDocument):
     def _update_alias(cls, alias, new_index):
         client = es_client()
         old_index = cls.alias_points_at(alias)
-        if not old_index:
-            client.indices.put_alias(new_index, alias)
-        else:
-            client.indices.update_aliases(
-                {
-                    "actions": [
-                        {"remove": {"index": old_index, "alias": alias}},
-                        {"add": {"index": new_index, "alias": alias}},
-                    ]
-                }
-            )
+        
+        # Start with empty actions list
+        actions = []
+        
+        # First check if the alias exists
+        alias_exists = False
+        try:
+            alias_exists = client.indices.exists_alias(name=alias)
+        except Exception as e:
+            print(f"Error checking if alias exists: {str(e)}")
+        
+        # Then check if an index with the same name as the alias exists
+        index_exists = False
+        try:
+            index_exists = client.indices.exists(index=alias)
+        except Exception as e:
+            print(f"Error checking if index exists: {str(e)}")
+        
+        # If an index with the same name as the alias exists, we need to delete it
+        if index_exists and not alias_exists:
+            try:
+                print(f"Found index with same name as alias {alias}, deleting it")
+                client.indices.delete(index=alias)
+            except Exception as e:
+                print(f"Error deleting index with same name as alias: {str(e)}")
+        
+        # If old_index exists, remove the alias from it
+        if old_index:
+            actions.append({"remove": {"index": old_index, "alias": alias}})
+        
+        # Add the alias to the new index
+        actions.append({"add": {"index": new_index, "alias": alias}})
+        
+        # Execute the update actions
+        try:
+            client.indices.update_aliases(body={"actions": actions})
+        except Exception as e:
+            print(f"Error updating aliases: {str(e)}")
+            raise
 
     @classmethod
     def alias_points_at(cls, alias):
@@ -202,8 +230,9 @@ class SumoDocument(DSLDocument):
 
         # If we are in a test environment, mark refresh=True so that
         # documents will be updated/added directly in the index.
+        # For ES8 we need to use the string value "true" instead of boolean
         if settings.TEST and not is_bulk:
-            kwargs.update({"refresh": True})
+            kwargs.update({"refresh": "true"})
 
         if not action or action == "index":
             return payload if is_bulk else self.save(**kwargs)
@@ -228,10 +257,12 @@ class SumoDocument(DSLDocument):
         elif action == "delete":
             # if we have a bulk operation, drop the _source and mark the operation as deletion
             if is_bulk:
+                if "_source" in payload:
+                    del payload["_source"]
                 payload.update({"_op_type": "delete"})
-                del payload["_source"]
                 return payload
             # This is a single document op, delete it
+            # ES8 requires specific error handling for common delete errors
             kwargs.update({"ignore": [400, 404]})
             return self.delete(**kwargs)
 
@@ -393,7 +424,12 @@ class SumoSearch(SumoSearchInterface):
         self.hits = result.hits
         self.last_key = key
 
-        self.total = self.hits.total.value  # type: ignore
+        # Handle total hits according to ES8 response format
+        # In ES8, total is always returned as an object with a 'value' property
+        self.total = getattr(self.hits.total, 'value', 0)
+        if isinstance(self.hits.total, dict):
+            self.total = self.hits.total.get('value', 0)
+
         self.results = [self.make_result(hit) for hit in self.hits]
 
         return self
