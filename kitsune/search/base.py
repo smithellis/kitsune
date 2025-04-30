@@ -96,41 +96,26 @@ class SumoDocument(DSLDocument):
         client = es_client()
         old_index = cls.alias_points_at(alias)
 
-        # Start with empty actions list
-        actions = []
-
-        # First check if the alias exists
-        alias_exists = False
+        # Handle special case where an index with same name as alias exists
         try:
-            alias_exists = client.indices.exists_alias(name=alias)
-        except Exception as e:
-            print(f"Error checking if alias exists: {str(e)}")
+            if client.indices.exists(index=alias) and not client.indices.exists_alias(name=alias):
+                client.indices.delete(index=alias, ignore=[400, 404])
+        except Exception:
+            # If we can't check or delete, proceed anyway and let the update_aliases handle it
+            pass
 
-        # Then check if an index with the same name as the alias exists
-        index_exists = False
         try:
-            index_exists = client.indices.exists(index=alias)
-        except Exception as e:
-            print(f"Error checking if index exists: {str(e)}")
-
-        # If an index with the same name as the alias exists, we need to delete it
-        if index_exists and not alias_exists:
-            try:
-                print(f"Found index with same name as alias {alias}, deleting it")
-                client.indices.delete(index=alias)
-            except Exception as e:
-                print(f"Error deleting index with same name as alias: {str(e)}")
-
-        # If old_index exists, remove the alias from it
-        if old_index:
-            actions.append({"remove": {"index": old_index, "alias": alias}})
-
-        # Add the alias to the new index
-        actions.append({"add": {"index": new_index, "alias": alias}})
-
-        # Execute the update actions
-        try:
-            client.indices.update_aliases(body={"actions": actions})
+            if not old_index:
+                client.indices.put_alias(index=new_index, name=alias)
+            else:
+                client.indices.update_aliases(
+                    body={
+                        "actions": [
+                            {"remove": {"index": old_index, "alias": alias}},
+                            {"add": {"index": new_index, "alias": alias}},
+                        ]
+                    }
+                )
         except Exception as e:
             print(f"Error updating aliases: {str(e)}")
             raise
