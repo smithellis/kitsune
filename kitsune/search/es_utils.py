@@ -98,28 +98,30 @@ def es_client(**kwargs):
         es_settings = {
             "hosts": settings.ES_URLS,
             "request_timeout": settings.ES_TIMEOUT,
-            "retry_on_timeout": True,
+            "retry_on_timeout": settings.ES_RETRY_ON_TIMEOUT,
             # SSL settings - these are needed for ES8 which requires SSL by default
-            "verify_certs": getattr(settings, "ES_VERIFY_CERTS", False),
-            "ssl_show_warn": False,
+            "verify_certs": settings.ES_VERIFY_CERTS,
+            "ssl_show_warn": settings.ES_SSL_SHOW_WARN,
             # Disable auto-discovery which can cause connection issues
-            "sniff_on_start": False,
-            "sniff_on_connection_fail": False,
+            "sniff_on_start": settings.ES_SNIFF_ON_START,
+            "sniff_on_connection_fail": settings.ES_SNIFF_ON_CONNECTION_FAIL,
         }
-            
+
         if settings.ES_HTTP_AUTH:
             es_settings.update({"basic_auth": settings.ES_HTTP_AUTH})
-            
+
         if settings.TEST:
             # In tests, increase timeout and retry settings
-            es_settings.update({
-                "request_timeout": settings.ES_TIMEOUT * 3,
-                "max_retries": 5,
-                "retry_on_timeout": True,
-            })
-            
+            es_settings.update(
+                {
+                    "request_timeout": settings.ES_TIMEOUT * settings.ES_TEST_TIMEOUT_MULTIPLIER,
+                    "max_retries": settings.ES_TEST_MAX_RETRIES,
+                    "retry_on_timeout": settings.ES_RETRY_ON_TIMEOUT,
+                }
+            )
+
         kwargs.update(es_settings)
-        
+
     return Elasticsearch(**kwargs)
 
 
@@ -161,7 +163,7 @@ def index_object(doc_type_name, obj_id):
     # For ES8, use string "true" instead of boolean True for refresh parameter
     if settings.TEST:
         kwargs["refresh"] = "true"
-        
+
     if doc_type.update_document:
         doc_type.prepare(obj).to_action("update", doc_as_upsert=True, **kwargs)
     else:
@@ -223,18 +225,18 @@ def remove_from_field(doc_type_name, field_name, field_value):
     doc_type = next(cls for cls in get_doc_types() if cls.__name__ == doc_type_name)
 
     # Create script as a string
-    script_source = f"if (ctx._source.{field_name} != null) {{ ctx._source.{field_name}.removeAll(Collections.singleton(params.value)); }}"
-    
+    script_source = (
+        f"if (ctx._source.{field_name} != null) {{ "
+        f"ctx._source.{field_name}.removeAll(Collections.singleton(params.value)); "
+        f"}}"
+    )
+
     # Set up the update query
     update = UpdateByQuery(using=es_client(), index=doc_type._index._name)
-    
+
     # Apply the script with parameters
-    update = update.script(
-        source=script_source,
-        lang="painless", 
-        params={"value": field_value}
-    )
-    
+    update = update.script(source=script_source, lang="painless", params={"value": field_value})
+
     update.execute()
 
 
@@ -245,10 +247,10 @@ def delete_object(doc_type_name, obj_id):
     doc_type = next(cls for cls in get_doc_types() if cls.__name__ == doc_type_name)
     doc = doc_type()
     doc.meta.id = obj_id
-    
+
     kwargs = {}
     # For ES8, use string "true" instead of boolean True for refresh parameter
     if settings.TEST:
         kwargs["refresh"] = "true"
-    
+
     doc.to_action("delete", **kwargs)
