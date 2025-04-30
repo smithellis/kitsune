@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from dataclasses import field as dfield
 from datetime import datetime
-from typing import Self, Union, overload
+from typing import Self, Union, overload, Any
 
 from django.conf import settings
 from django.core.paginator import EmptyPage, PageNotAnInteger
@@ -14,7 +14,6 @@ from elasticsearch.dsl import Document as DSLDocument
 from elasticsearch.dsl import InnerDoc, MetaField
 from elasticsearch.dsl import Search as DSLSearch
 from elasticsearch.dsl import field
-from elasticsearch.dsl.utils import AttrDict
 from pyparsing import ParseException
 
 from kitsune.search.config import (
@@ -95,24 +94,24 @@ class SumoDocument(DSLDocument):
     def _update_alias(cls, alias, new_index):
         client = es_client()
         old_index = cls.alias_points_at(alias)
-        
+
         # Start with empty actions list
         actions = []
-        
+
         # First check if the alias exists
         alias_exists = False
         try:
             alias_exists = client.indices.exists_alias(name=alias)
         except Exception as e:
             print(f"Error checking if alias exists: {str(e)}")
-        
+
         # Then check if an index with the same name as the alias exists
         index_exists = False
         try:
             index_exists = client.indices.exists(index=alias)
         except Exception as e:
             print(f"Error checking if index exists: {str(e)}")
-        
+
         # If an index with the same name as the alias exists, we need to delete it
         if index_exists and not alias_exists:
             try:
@@ -120,14 +119,14 @@ class SumoDocument(DSLDocument):
                 client.indices.delete(index=alias)
             except Exception as e:
                 print(f"Error deleting index with same name as alias: {str(e)}")
-        
+
         # If old_index exists, remove the alias from it
         if old_index:
             actions.append({"remove": {"index": old_index, "alias": alias}})
-        
+
         # Add the alias to the new index
         actions.append({"add": {"index": new_index, "alias": alias}})
-        
+
         # Execute the update actions
         try:
             client.indices.update_aliases(body={"actions": actions})
@@ -347,7 +346,7 @@ class SumoSearch(SumoSearchInterface):
     """
 
     total: int = dfield(default=0, init=False)
-    hits: list[AttrDict] = dfield(default_factory=list, init=False)
+    hits: Any = dfield(default_factory=list, init=False)
     results: list[dict] = dfield(default_factory=list, init=False)
     last_key: Union[int, slice, None] = dfield(default=None, init=False)
 
@@ -426,9 +425,9 @@ class SumoSearch(SumoSearchInterface):
 
         # Handle total hits according to ES8 response format
         # In ES8, total is always returned as an object with a 'value' property
-        self.total = getattr(self.hits.total, 'value', 0)
+        self.total = getattr(self.hits.total, "value", 0)
         if isinstance(self.hits.total, dict):
-            self.total = self.hits.total.get('value', 0)
+            self.total = self.hits.total.get("value", 0)
 
         self.results = [self.make_result(hit) for hit in self.hits]
 
