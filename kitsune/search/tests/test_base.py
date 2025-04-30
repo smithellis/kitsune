@@ -32,8 +32,7 @@ class ToActionTests(Elastic7TestCase):
         self.assertEqual(self.doc.group_ids, [])
 
     def test_update_empty_list(self):
-        """Verify empty lists are preserved in to_dict()"""
-        self.doc.group_ids = []
+        self.prepare().to_action("update")
         self.assertEqual(self.doc.group_ids, [])
 
     def test_update_bulk_empty_list(self):

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from dataclasses import field as dfield
 from datetime import datetime
-from typing import Self, Union, overload, Any
+from typing import Self, Union, overload, cast
 
 from django.conf import settings
 from django.core.paginator import EmptyPage, PageNotAnInteger
@@ -14,6 +14,7 @@ from elasticsearch.dsl import Document as DSLDocument
 from elasticsearch.dsl import InnerDoc, MetaField
 from elasticsearch.dsl import Search as DSLSearch
 from elasticsearch.dsl import field
+from elasticsearch.dsl.utils import AttrDict
 from pyparsing import ParseException
 
 from kitsune.search.config import (
@@ -346,7 +347,7 @@ class SumoSearch(SumoSearchInterface):
     """
 
     total: int = dfield(default=0, init=False)
-    hits: Any = dfield(default_factory=list, init=False)
+    hits: AttrDict = dfield(default_factory=list, init=False)
     results: list[dict] = dfield(default_factory=list, init=False)
     last_key: Union[int, slice, None] = dfield(default=None, init=False)
 
@@ -420,7 +421,7 @@ class SumoSearch(SumoSearchInterface):
                 return self.run(key)
             raise e
 
-        self.hits = result.hits
+        self.hits = cast(AttrDict, result.hits)
         self.last_key = key
 
         # Handle total hits according to ES8 response format
