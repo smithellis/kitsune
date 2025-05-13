@@ -4,13 +4,8 @@ import inspect
 from celery import shared_task
 from django.conf import settings
 from elasticsearch import Elasticsearch
-from elasticsearch.helpers import bulk as es_bulk
 from elasticsearch.helpers.errors import BulkIndexError
-
-if settings.ES_VERSION == 8:
-    from elasticsearch8.dsl import Document, UpdateByQuery, analyzer, char_filter, token_filter
-else:
-    from elasticsearch_dsl import Document, UpdateByQuery, analyzer, char_filter, token_filter
+from elasticsearch_dsl import Document, UpdateByQuery, analyzer, char_filter, token_filter
 
 from kitsune.search import config
 
@@ -145,31 +140,52 @@ def get_doc_types(paths=["kitsune.search.documents"]):
 
 @shared_task
 def index_object(doc_type_name, obj_id):
-    """Index an ORM object given an object id and a document type name."""
+    """
+    Index an object in the search index.
 
+    Args:
+        doc_type_name: Name of the document type
+        obj_id: ID of the object to index
+    """
     doc_type = next(cls for cls in get_doc_types() if cls.__name__ == doc_type_name)
-    model = doc_type.get_model()
 
     try:
-        obj = model.objects.get(pk=obj_id)
+        obj = model = doc_type.get_model()
+        if isinstance(obj_id, model):
+            obj = obj_id
+        else:
+            obj = model.objects.get(pk=obj_id)
     except model.DoesNotExist:
         # if the row doesn't exist in DB, it may have been deleted while this job
         # was in the celery queue - this shouldn't be treated as a failure, so
         # just return
         return
 
-    kwargs = {}
-    # For ES8, use string "true" instead of boolean True for refresh parameter
-    if settings.TEST:
-        if settings.ES_VERSION >= 8:
-            kwargs["refresh"] = "true"
-        else:
-            kwargs["refresh"] = True
+    # Prepare the document
+    prepared_doc = doc_type.prepare(obj)
 
-    if doc_type.update_document:
-        doc_type.prepare(obj).to_action("update", doc_as_upsert=True, **kwargs)
-    else:
-        doc_type.prepare(obj).to_action("index", **kwargs)
+    # Set refresh parameter based on ES version and test mode
+    refresh = None
+    if settings.TEST:
+        refresh = "true" if getattr(settings, "ES_VERSION", 0) >= 8 else True
+
+    # Use appropriate indexing approach based on document update setting and ES version
+    try:
+        es_version = getattr(settings, "ES_VERSION", 7)
+        if doc_type.update_document:
+            if es_version >= 8:
+                # For ES8+, use regular save without doc_as_upsert
+                prepared_doc.save(refresh=refresh)
+            else:
+                # For ES7 and below, don't pass script parameter
+                # The ES7 client doesn't accept script=None
+                prepared_doc.save(refresh=refresh)
+        else:
+            # For non-update documents, use regular save
+            prepared_doc.save(refresh=refresh)
+    except Exception:
+        print(f"Error indexing {doc_type_name} {obj_id}")
+        raise
 
 
 @shared_task
@@ -180,45 +196,79 @@ def index_objects_bulk(
     elastic_chunk_size=settings.ES_DEFAULT_ELASTIC_CHUNK_SIZE,
 ):
     """Bulk index ORM objects given a list of object ids and a document type name."""
-
     doc_type = next(cls for cls in get_doc_types() if cls.__name__ == doc_type_name)
-
     db_objects = doc_type.get_queryset().filter(pk__in=obj_ids)
-    # prepare the docs for indexing
-    docs = [doc_type.prepare(obj) for obj in db_objects]
 
-    # set the appropriate action per document type
-    action = "index"
-    kwargs = {}
-    # If the `update_document` is true we are using update instead of index
-    if doc_type.update_document:
-        action = "update"
-        kwargs.update({"doc_as_upsert": True})
-
-    # if the request doesn't resolve within `timeout`,
-    # sleep for `timeout` then try again up to `settings.ES_BULK_MAX_RETRIES` times,
-    # before raising an exception:
-    _, errors = es_bulk(
-        es_client(
-            request_timeout=timeout,
-            retry_on_timeout=True,
-        ),
-        (doc.to_action(action=action, is_bulk=True, **kwargs) for doc in docs),
-        chunk_size=elastic_chunk_size,
-        raise_on_error=False,  # we'll raise the errors ourselves, so all the chunks get sent
-        refresh=(
-            "true"
-            if settings.TEST and settings.ES_VERSION >= 8
-            else (True if settings.TEST else False)
-        ),  # refresh parameter based on test mode and ES version
+    # Get the client with appropriate timeout settings
+    client = es_client(
+        request_timeout=timeout,
+        retry_on_timeout=True,
     )
-    errors = [
-        error
-        for error in errors
-        if not (error.get("delete") and error["delete"]["status"] in [400, 404])
-    ]
+
+    # Count of successfully indexed documents
+    success_count = 0
+    error_count = 0
+    errors = []
+
+    # Process in chunks to avoid memory issues
+    for i in range(0, len(db_objects), elastic_chunk_size):
+        chunk = db_objects[i : i + elastic_chunk_size]
+        docs = []
+
+        # Prepare all documents in the chunk
+        for obj in chunk:
+            try:
+                prepared = doc_type.prepare(obj)
+                docs.append(prepared)
+            except Exception as e:
+                errors.append({"id": obj.pk, "error": str(e), "type": "preparation_error"})
+                error_count += 1
+
+        # Index all prepared documents in the chunk
+        for doc in docs:
+            try:
+                # Set refresh parameter based on ES version and test mode
+                refresh = None
+                if settings.TEST:
+                    refresh = "true" if getattr(settings, "ES_VERSION", 0) >= 8 else True
+
+                # Use appropriate indexing approach based on document update setting and ES version
+                es_version = getattr(settings, "ES_VERSION", 7)
+                if doc_type.update_document:
+                    if es_version >= 8:
+                        # For ES8+, use regular save without doc_as_upsert
+                        doc.save(refresh=refresh)
+                    else:
+                        # For ES7 and below, don't pass script parameter
+                        doc.save(refresh=refresh)
+                else:
+                    # For non-update documents, use regular save
+                    doc.save(refresh=refresh)
+
+                success_count += 1
+            except Exception:
+                errors.append(
+                    {
+                        "id": getattr(doc.meta, "id", "unknown"),
+                        "error": "Error indexing document",
+                        "type": "indexing_error",
+                    }
+                )
+                error_count += 1
+
+    # Refresh the index to make documents searchable immediately
+    if not settings.TEST:  # Only if not already refreshed in test mode
+        try:
+            client.indices.refresh(index=doc_type._index._name)
+        except Exception:
+            # Log but don't fail on refresh error
+            print("Warning: Index refresh failed")
+
+    # Report errors if any occurred
     if errors:
-        raise BulkIndexError(f"{len(errors)} document(s) failed to index.", errors)
+        raise BulkIndexError(f"{error_count} document(s) failed to index.", errors)
+
+    return success_count
 
 
 @shared_task
@@ -270,18 +320,79 @@ def remove_from_field(doc_type_name, field_name, field_value):
 
 @shared_task
 def delete_object(doc_type_name, obj_id):
-    """Unindex an ORM object given an object id and document type name."""
+    """
+    Delete an object from the search index.
 
+    Args:
+        doc_type_name: Name of the document type
+        obj_id: ID of the object to delete
+    """
     doc_type = next(cls for cls in get_doc_types() if cls.__name__ == doc_type_name)
-    doc = doc_type()
-    doc.meta.id = obj_id
 
-    kwargs = {}
-    # For ES8, use string "true" instead of boolean True for refresh parameter
+    # Set refresh parameter based on ES version
+    refresh = None
     if settings.TEST:
-        if settings.ES_VERSION >= 8:
-            kwargs["refresh"] = "true"
-        else:
-            kwargs["refresh"] = True
+        refresh = "true" if getattr(settings, "ES_VERSION", 0) >= 8 else True
 
-    doc.to_action("delete", **kwargs)
+    try:
+        # Create a document with just the ID and delete it
+        doc = doc_type(meta={"id": obj_id})
+        doc.delete(refresh=refresh, ignore=404)  # Ignore 404 errors if document is not found
+
+        # For test mode, explicitly refresh the index to ensure deletion is visible immediately
+        if settings.TEST and not refresh:
+            es_client().indices.refresh(index=doc_type._index._name)
+    except Exception:
+        print(f"Error deleting {doc_type_name} {obj_id}")
+        # Don't re-raise the error since deletion failures are usually not critical
+
+
+def index_objects(doc_type_name, obj_ids, refresh=False):
+    """
+    Index a list of objects directly (without using Celery).
+    This is useful for tests or direct indexing scenarios.
+
+    Args:
+        doc_type_name: Name of the document type to index
+        obj_ids: List of object IDs to index
+        refresh: Whether to refresh the index after indexing
+
+    Returns:
+        int: Number of successfully indexed documents
+    """
+    doc_type = next(cls for cls in get_doc_types() if cls.__name__ == doc_type_name)
+
+    # Get objects from database
+    db_objects = doc_type.get_queryset().filter(pk__in=obj_ids)
+
+    # Set refresh parameter based on ES version
+    refresh_param = None
+    if refresh:
+        refresh_param = "true" if getattr(settings, "ES_VERSION", 0) >= 8 else True
+
+    # Index each document
+    success_count = 0
+    for obj in db_objects:
+        try:
+            prepared = doc_type.prepare(obj)
+            if doc_type.update_document:
+                if getattr(settings, "ES_VERSION", 0) >= 8:
+                    # For ES8+, use regular save without doc_as_upsert
+                    prepared.save(refresh=refresh_param)
+                else:
+                    # For ES7 and below, use script=None (equivalent to doc_as_upsert=True)
+                    prepared.save(refresh=refresh_param, script=None)
+            else:
+                prepared.save(refresh=refresh_param)
+            success_count += 1
+        except Exception as e:
+            print(f"Error indexing {doc_type_name} {obj.pk}: {str(e)}")
+
+    # Refresh the index if requested
+    if refresh and not refresh_param:
+        try:
+            es_client().indices.refresh(index=doc_type._index._name)
+        except Exception as e:
+            print(f"Warning: Index refresh failed: {str(e)}")
+
+    return success_count

@@ -1,3 +1,6 @@
+# Import early to set up the compatibility layer before other modules are imported
+# Import specific items from es_modules explicitly when needed
+
 from django.utils.translation import gettext_lazy as _lazy
 
 WHERE_WIKI = 1

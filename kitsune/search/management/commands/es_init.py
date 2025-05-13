@@ -1,10 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.conf import settings
 
-if settings.ES_VERSION == 8:
-    from elasticsearch8.dsl.exceptions import IllegalOperation
-else:
-    from elasticsearch_dsl.exceptions import IllegalOperation
+from elasticsearch_dsl.exceptions import IllegalOperation
 from datetime import datetime, timezone
 
 from kitsune.search.es_utils import get_doc_types, es_client

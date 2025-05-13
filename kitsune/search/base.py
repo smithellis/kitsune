@@ -10,19 +10,11 @@ from django.core.paginator import Paginator as DjPaginator
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from elasticsearch.exceptions import NotFoundError, RequestError
-
-if settings.ES_VERSION == 8:
-    from elasticsearch8.dsl import Document as DSLDocument
-    from elasticsearch8.dsl import InnerDoc, MetaField
-    from elasticsearch8.dsl import Search as DSLSearch
-    from elasticsearch8.dsl import field
-    from elasticsearch8.dsl.utils import AttrDict
-else:
-    from elasticsearch_dsl import Document as DSLDocument
-    from elasticsearch_dsl import InnerDoc, MetaField
-    from elasticsearch_dsl import Search as DSLSearch
-    from elasticsearch_dsl import field
-    from elasticsearch_dsl.utils import AttrDict
+from elasticsearch_dsl import Document as DSLDocument
+from elasticsearch_dsl import InnerDoc, MetaField
+from elasticsearch_dsl import Search as DSLSearch
+from elasticsearch_dsl import field
+from elasticsearch_dsl.utils import AttrDict
 from pyparsing import ParseException
 
 from kitsune.search.config import (
@@ -64,7 +56,12 @@ class SumoDocument(DSLDocument):
         else:
             name = immediate_parent.__name__
 
-        cls.Index.base_name = f"{settings.ES_INDEX_PREFIX}_{name.lower()}"
+        # Add test_ prefix to index name when in test mode
+        prefix = f"{settings.ES_INDEX_PREFIX}_"
+        if getattr(settings, "TEST", False):
+            prefix = f"{settings.ES_INDEX_PREFIX}_test_"
+
+        cls.Index.base_name = f"{prefix}{name.lower()}"
         cls.Index.read_alias = f"{cls.Index.base_name}_read"
         cls.Index.write_alias = f"{cls.Index.base_name}_write"
         # Bump the refresh interval to 1 minute
@@ -399,12 +396,12 @@ class SumoSearch(SumoSearchInterface):
         # perform search
         try:
             result = search.execute()
-        except RequestError as e:
+        except RequestError:
             if self.parse_query:
                 # try search again, but without parsing any advanced syntax
                 self.parse_query = False
                 return self.run(key)
-            raise e
+            raise
 
         if settings.ES_VERSION >= 8:
             self.hits = cast(AttrDict, result.hits)

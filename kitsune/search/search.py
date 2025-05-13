@@ -5,13 +5,8 @@ from typing import Optional
 
 import bleach
 from dateutil import parser
-from django.conf import settings
 from django.utils.text import slugify
-
-if settings.ES_VERSION == 8:
-    from elasticsearch8.dsl import Q as DSLQ
-else:
-    from elasticsearch_dsl import Q as DSLQ
+from elasticsearch_dsl import Q as DSLQ
 
 from kitsune.products.models import Product
 from kitsune.search import HIGHLIGHT_TAG, SNIPPET_LENGTH

@@ -2,8 +2,7 @@ from decouple import Csv, config
 
 from django.conf import settings
 
-from elasticsearch7 import Elasticsearch as ES7
-from elasticsearch8 import Elasticsearch as ES8
+from elasticsearch import Elasticsearch
 
 from kitsune.lib.sumo_locales import LOCALES
 
@@ -51,18 +50,12 @@ def get_es_version():
         es_kwargs["cloud_id"] = cloud_id
 
     try:
-        es = ES7(**es_kwargs)
+        es = Elasticsearch(**es_kwargs)
         response = es.info()
         # Extract major version as integer
         _ES_VERSION = int(response["version"]["number"].split(".")[0])
-    except Exception:
-        try:
-            es = ES8(**es_kwargs)
-            response = es.info()
-            # Extract major version as integer
-            _ES_VERSION = int(response["version"]["number"].split(".")[0])
-        except Exception as e:
-            print(f"Elasticsearch connection error: {e}")
-            _ES_VERSION = 0  # Default if connection fails
+    except Exception as e:
+        print(f"Elasticsearch connection error: {e}")
+        _ES_VERSION = 0  # Default if connection fails
 
     return _ES_VERSION

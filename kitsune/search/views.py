@@ -1,5 +1,4 @@
 import json
-import logging
 from datetime import datetime, timedelta
 
 from django.conf import settings
@@ -19,8 +18,6 @@ from kitsune.sumo.api_utils import JSONRenderer
 from kitsune.sumo.templatetags.jinja_helpers import Paginator as PaginatorRenderer
 from kitsune.sumo.utils import paginate
 from kitsune.wiki.facets import documents_for
-
-log = logging.getLogger("k.search")
 
 
 def cache_control(resp, cache_period):

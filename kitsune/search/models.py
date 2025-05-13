@@ -1,8 +1,4 @@
-import logging
-
-# from elasticutils.contrib.django import Indexable, MappingType
-
-log = logging.getLogger("k.search.es")
+# Removed unused import: # from elasticutils.contrib.django import Indexable, MappingType
 
 
 class SearchMixin(object):
