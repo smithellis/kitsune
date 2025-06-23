@@ -1,9 +1,9 @@
-from django.core.management.base import BaseCommand
-from elasticsearch.dsl import IllegalOperation
 from datetime import datetime, timezone
 
+from django.core.management.base import BaseCommand
+from elasticsearch import ApiError
 
-from kitsune.search.es_utils import get_doc_types, es_client
+from kitsune.search.es_utils import es_client, get_doc_types
 
 
 class Command(BaseCommand):
@@ -58,37 +58,20 @@ class Command(BaseCommand):
                     migrate_reads = True
                 else:
                     print("Updating index")
-                    # Close the index before updating analysis settings
-                    try:
-                        # Check if the index exists first
-                        if client.indices.exists(index=index):
-                            print(f"Closing index {index} for analysis updates...")
-                            client.indices.close(index=index)
-
-                            # Initialize the DocType (updates analysis settings)
-                            dt.init(index=index)
-
-                            # Reopen the index
-                            print(f"Reopening index {index}...")
-                            client.indices.open(index=index)
-                        else:
-                            # If index doesn't exist, just initialize it
-                            dt.init(index=index)
-                    except Exception as e:
-                        print(f"Error updating index: {e}")
+                    dt.init(index=index)
 
             if migrate_writes:
                 try:
                     print("Migrating writes: creating new index and pointing write alias at it")
                     dt.migrate_writes(timestamp=timestamp)
-                except IllegalOperation as e:
+                except ApiError as e:
                     print(e)
 
             if migrate_reads:
                 try:
                     print("Migrating reads: pointing read alias where write alias points")
                     dt.migrate_reads()
-                except IllegalOperation as e:
+                except ApiError as e:
                     print(e)
 
             index = dt.alias_points_at(dt.Index.write_alias)

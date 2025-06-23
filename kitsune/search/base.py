@@ -2,18 +2,19 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from dataclasses import field as dfield
 from datetime import datetime
-from typing import Self, Union, overload, Any, List
+from typing import Self, Union, overload
 
 from django.conf import settings
 from django.core.paginator import EmptyPage, PageNotAnInteger
 from django.core.paginator import Paginator as DjPaginator
 from django.utils import timezone
 from django.utils.translation import gettext as _
-from elasticsearch import ApiError, NotFoundError, RequestError
+from elasticsearch import NotFoundError, RequestError
 from elasticsearch.dsl import Document as DSLDocument
 from elasticsearch.dsl import InnerDoc, MetaField
 from elasticsearch.dsl import Search as DSLSearch
 from elasticsearch.dsl import field
+from elasticsearch.dsl.utils import AttrDict
 from pyparsing import ParseException
 
 from kitsune.search.config import (
@@ -229,14 +230,11 @@ class SumoDocument(DSLDocument):
                 del payload["_source"]
                 return payload
             # This is a single document op, delete it
-            es = es_client()
-            es = es.options(ignore_status=[400, 404])
-
-            # In test mode, pass refresh directly to the delete method
+            kwargs.update({"ignore": [400, 404]})
             if settings.TEST:
-                return es.delete(index=self._get_index(), id=self.meta.id, refresh=True)
-            else:
-                return es.delete(index=self._get_index(), id=self.meta.id)
+                kwargs.update({"refresh": True})
+
+            return self.delete(**kwargs)
 
     @classmethod
     def get_queryset(cls):
@@ -319,8 +317,8 @@ class SumoSearch(SumoSearchInterface):
     """
 
     total: int = dfield(default=0, init=False)
-    hits: Any = dfield(default=None, init=False)
-    results: List[dict] = dfield(default_factory=list, init=False)
+    hits: list[AttrDict] = dfield(default_factory=list, init=False)
+    results: list[dict] = dfield(default_factory=list, init=False)
     last_key: Union[int, slice, None] = dfield(default=None, init=False)
 
     query: str = ""
@@ -386,7 +384,7 @@ class SumoSearch(SumoSearchInterface):
         # perform search
         try:
             result = search.execute()
-        except (RequestError, ApiError) as e:
+        except RequestError as e:
             if self.parse_query:
                 # try search again, but without parsing any advanced syntax
                 self.parse_query = False
@@ -396,12 +394,8 @@ class SumoSearch(SumoSearchInterface):
         self.hits = result.hits
         self.last_key = key
 
-        # In ES9, total is a dictionary with 'value' and 'relation' keys
-        if self.hits is not None:
-            self.total = int(self.hits.total["value"])
-            self.results = [self.make_result(hit) for hit in self.hits]
-        else:
-            self.results = []
+        self.total = self.hits.total.value  # type: ignore
+        self.results = [self.make_result(hit) for hit in self.hits]
 
         return self
 

@@ -6,7 +6,7 @@ from django.conf import settings
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk as es_bulk
 from elasticsearch.helpers.errors import BulkIndexError
-from elasticsearch.dsl import Document, analyzer, char_filter, token_filter
+from elasticsearch.dsl import Document, UpdateByQuery, analyzer, char_filter, token_filter
 
 from kitsune.search import config
 
@@ -44,9 +44,9 @@ def _create_synonym_graph_filter(synonym_file_name):
         filter_name,
         type="synonym_graph",
         synonyms_path=f"synonyms/{synonym_file_name}.txt",
-        expanded=True,
-        lenient=True,
-        updateable=True,
+        expand="true",
+        lenient="true",
+        updateable="true",
     )
 
 
@@ -90,13 +90,27 @@ def es_analyzer_for_locale(locale, search_analyzer=False):
 
 
 def es_client(**kwargs):
-    """Return an ES Elasticsearch client"""
+    """Return an Elasticsearch client configured for ES9"""
+    defaults = {"request_timeout": settings.ES_TIMEOUT, "retry_on_timeout": True, "max_retries": 3}
+
+    defaults.update(kwargs)
+
     # prefer a cloud_id if available
     if es_cloud_id := settings.ES_CLOUD_ID:
-        kwargs.update({"cloud_id": es_cloud_id, "basic_auth": settings.ES_HTTP_AUTH})
+        defaults.update({"cloud_id": es_cloud_id})
+        if settings.ES_HTTP_AUTH:
+            if len(settings.ES_HTTP_AUTH) == 2:
+                defaults.update({"basic_auth": settings.ES_HTTP_AUTH})
+            else:
+                defaults.update({"api_key": settings.ES_HTTP_AUTH[0]})
     else:
-        kwargs.update({"hosts": settings.ES_URLS})
-    return Elasticsearch(**kwargs)
+        hosts = []
+        for url in settings.ES_URLS:
+            if not url.startswith(("http://", "https://")):
+                url = f"http://{url}"
+            hosts.append(url)
+        defaults.update({"hosts": hosts})
+    return Elasticsearch(**defaults)
 
 
 def get_doc_types(paths=["kitsune.search.documents"]):
@@ -162,19 +176,15 @@ def index_objects_bulk(
         action = "update"
         kwargs.update({"doc_as_upsert": True})
 
-    # ES client options are now set with options() instead of passing directly
-    client = es_client()
-    client = client.options(
-        request_timeout=timeout,
-        retry_on_timeout=True,
-        max_retries=settings.ES_BULK_MAX_RETRIES,
-    )
-
     # if the request doesn't resolve within `timeout`,
     # sleep for `timeout` then try again up to `settings.ES_BULK_MAX_RETRIES` times,
     # before raising an exception:
     _, errors = es_bulk(
-        client,
+        es_client(
+            request_timeout=timeout,
+            retry_on_timeout=True,
+            max_retries=settings.ES_BULK_MAX_RETRIES,
+        ),
         (doc.to_action(action=action, is_bulk=True, **kwargs) for doc in docs),
         chunk_size=elastic_chunk_size,
         raise_on_error=False,  # we'll raise the errors ourselves, so all the chunks get sent
@@ -200,19 +210,14 @@ def remove_from_field(doc_type_name, field_name, field_value):
         f"}}"
     )
 
-    # Get a client directly to use the update_by_query API
-    es = es_client()
+    update = UpdateByQuery(using=es_client(), index=doc_type._index._name)
+    update = update.filter("term", **{field_name: field_value})
+    update = update.script(source=script, params={"value": field_value}, conflicts="proceed")
 
     # refresh index to ensure search fetches all matches
     doc_type._index.refresh()
 
-    # In ES8+, we need to use the client directly and set conflicts parameter there
-    es.update_by_query(
-        index=doc_type._index._name,
-        query={"term": {field_name: field_value}},
-        script={"source": script, "params": {"value": field_value}},
-        conflicts="proceed",
-    )
+    update.execute()
 
     # If we are in a test environment, refresh so that
     # documents will be updated/added directly in the index.

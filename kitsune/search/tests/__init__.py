@@ -17,7 +17,3 @@ class ElasticTestCase(TestCase):
             # the API refresh=True which only updates the shard that performed
             # the specific delete/update/save op
             doc_type._index.refresh()
-
-
-# Keep this for backwards compatibility
-Elastic7TestCase = ElasticTestCase
