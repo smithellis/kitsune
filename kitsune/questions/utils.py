@@ -10,6 +10,7 @@ from django.contrib.sessions.backends.base import SessionBase
 from sentry_sdk import capture_exception
 
 from kitsune.flagit.models import FlaggedObject
+from kitsune.kbforums.models import Thread, Post
 from kitsune.llm.questions.classifiers import ModerationAction
 from kitsune.products.models import Product, Topic
 from kitsune.questions.models import Answer, Question
@@ -56,6 +57,12 @@ def mark_content_as_spam(user, by_user):
 
     for answer in Answer.objects.filter(creator=user):
         answer.mark_as_spam(by_user)
+
+    for thread in Thread.objects.filter(creator=user):
+        thread.mark_as_spam(by_user)
+
+    for post in Post.objects.filter(creator=user):
+        post.mark_as_spam(by_user)
 
 
 def get_mobile_product_from_ua(user_agent):

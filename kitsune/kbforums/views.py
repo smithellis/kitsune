@@ -69,7 +69,8 @@ def threads(request, document_slug):
         desc = 0
     desc_toggle = 0 if desc else 1
 
-    threads_ = sort_threads(doc.thread_set, sort, desc)
+    threads_ = doc.thread_set.filter(is_spam=False)
+    threads_ = sort_threads(threads_, sort, desc)
     threads_ = paginate(request, threads_, per_page=kbforums.THREADS_PER_PAGE)
 
     feed_urls = (

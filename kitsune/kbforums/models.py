@@ -42,6 +42,12 @@ class Thread(NotificationsMixin, ModelBase):
     is_locked = models.BooleanField(default=False)
     is_sticky = models.BooleanField(default=False, db_index=True)
 
+    is_spam = models.BooleanField(default=False)
+    marked_as_spam = models.DateTimeField(default=None, null=True)
+    marked_as_spam_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name="threads_marked_as_spam"
+    )
+
     class Meta:
         ordering = ["-is_sticky", "-last_post__created"]
         permissions = (
@@ -87,6 +93,11 @@ class Post(ModelBase):
     updated = models.DateTimeField(default=datetime.datetime.now, db_index=True)
     updated_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, related_name="wiki_post_last_updated_by", null=True
+    )
+    is_spam = models.BooleanField(default=False)
+    marked_as_spam = models.DateTimeField(default=None, null=True)
+    marked_as_spam_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name="posts_marked_as_spam"
     )
 
     class Meta:
