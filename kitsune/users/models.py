@@ -5,6 +5,8 @@ from functools import cached_property
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.db.models.functions import Upper
 from django.utils.translation import gettext_lazy as _lazy
@@ -49,6 +51,77 @@ class ContributionAreas(models.TextChoices):
     @classmethod
     def has_member(cls, value):
         return value in cls._member_names_
+
+
+class ContributionType(models.TextChoices):
+    QUESTION = "question", _lazy("Question Created")
+    ANSWER = "answer", _lazy("Answer Created")
+    SOLUTION = "solution", _lazy("Solution Marked")
+    KB_EDIT = "kb_edit", _lazy("KB Edit")
+    KB_REVIEW = "kb_review", _lazy("KB Review")
+    HELPFUL_VOTE = "helpful_vote", _lazy("Helpful Vote Received")
+
+
+class ContributionEvent(ModelBase):
+    """
+    Immutable log of contribution events that preserves contributor statistics
+    regardless of content deletion. This enables time-based metrics that remain
+    accurate even when the original content is removed.
+    """
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="contribution_events",
+        help_text=_lazy("User who made the contribution")
+    )
+    contribution_type = models.CharField(
+        max_length=20,
+        choices=ContributionType.choices,
+        help_text=_lazy("Type of contribution made")
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text=_lazy("When the contribution was made")
+    )
+
+    # Keep the reference to the content, even though it might
+    # be deleted
+    content_type = models.ForeignKey(
+        ContentType,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        help_text=_lazy("Type of content that was contributed to")
+    )
+    object_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=_lazy("ID of the content that was contributed to")
+    )
+    content_object = GenericForeignKey('content_type', 'object_id')
+
+    # Additional metadata for contribution context
+    locale = models.CharField(
+        max_length=7,
+        blank=True,
+        default="",
+        help_text=_lazy("Locale of the contribution (for KB content)")
+    )
+
+    class Meta:
+        indexes = [
+            # Primary indexes for time-based queries
+            models.Index(fields=['user', 'contribution_type', 'created_at']),
+            models.Index(fields=['contribution_type', 'created_at']),
+            models.Index(fields=['created_at']),
+            # Locale-specific queries for KB contributions
+            models.Index(fields=['contribution_type', 'locale', 'created_at']),
+        ]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.get_contribution_type_display()} at {self.created_at}"
 
 
 @auto_delete_files

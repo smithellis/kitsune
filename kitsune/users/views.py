@@ -47,7 +47,13 @@ from kitsune.sumo.urlresolvers import reverse
 from kitsune.sumo.utils import get_next_url, paginate, simple_paginate
 from kitsune.tidings.models import Watch
 from kitsune.users.forms import ContributionAreaForm, ProfileForm, SettingsForm, UserForm
-from kitsune.users.models import SET_ID_PREFIX, AccountEvent, Deactivation, Profile
+from kitsune.users.models import (
+    SET_ID_PREFIX,
+    AccountEvent,
+    ContributionEvent,
+    Deactivation,
+    Profile,
+)
 from kitsune.users.tasks import (
     process_event_delete_user,
     process_event_password_change,
@@ -61,6 +67,15 @@ from kitsune.users.utils import (
     get_oidc_fxa_setting,
 )
 from kitsune.wiki.models import user_documents, user_redirects
+
+
+def _num_documents_from_events(user):
+    """Helper to get document contribution count from event log."""
+    count = ContributionEvent.objects.filter(
+        user=user,
+        contribution_type=ContributionEvent.ContributionType.KB_EDIT
+    ).count()
+    return count if count > 0 else None
 
 
 @logout_required
@@ -144,7 +159,10 @@ def profile(request, username):
                 "num_questions": num_questions(user_profile.user),
                 "num_answers": num_answers(user_profile.user),
                 "num_solutions": num_solutions(user_profile.user),
-                "num_documents": user_documents(user_profile.user, viewer=request.user).count(),
+                "num_documents": (
+                    _num_documents_from_events(user_profile.user) or
+                    user_documents(user_profile.user, viewer=request.user).count()
+                ),
             }
         )
 

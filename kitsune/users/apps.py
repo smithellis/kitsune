@@ -24,3 +24,5 @@ class UserConfig(AppConfig):
         if hasattr(User.all_users, "_hints"):
             new_manager._hints = User.all_users._hints
         User.objects = new_manager
+
+        # Import signals to connect contribution event logging

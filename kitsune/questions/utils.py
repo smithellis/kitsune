@@ -13,7 +13,7 @@ from kitsune.flagit.models import FlaggedObject
 from kitsune.llm.questions.classifiers import ModerationAction
 from kitsune.products.models import Product, Topic
 from kitsune.questions.models import Answer, Question
-from kitsune.users.models import Profile
+from kitsune.users.models import ContributionEvent, Profile
 from kitsune.wiki.utils import get_featured_articles as kb_get_featured_articles
 from kitsune.wiki.utils import has_visited_kb
 
@@ -31,16 +31,40 @@ log = logging.getLogger("k.questions")
 
 def num_questions(user):
     """Returns the number of questions a user has."""
+    # Use event log if available and populated, fallback to live count
+    event_count = ContributionEvent.objects.filter(
+        user=user,
+        contribution_type=ContributionEvent.ContributionType.QUESTION
+    ).count()
+
+    if event_count > 0:
+        return event_count
     return Question.objects.filter(creator=user).count()
 
 
 def num_answers(user):
     """Returns the number of answers a user has."""
+    # Use event log if available and populated, fallback to live count
+    event_count = ContributionEvent.objects.filter(
+        user=user,
+        contribution_type=ContributionEvent.ContributionType.ANSWER
+    ).count()
+
+    if event_count > 0:
+        return event_count
     return Answer.objects.filter(creator=user).count()
 
 
 def num_solutions(user):
     """Returns the number of solutions a user has."""
+    # Use event log if available and populated, fallback to live count
+    event_count = ContributionEvent.objects.filter(
+        user=user,
+        contribution_type=ContributionEvent.ContributionType.SOLUTION
+    ).count()
+
+    if event_count > 0:
+        return event_count
     return Question.objects.filter(solution__creator=user).count()
 
 
