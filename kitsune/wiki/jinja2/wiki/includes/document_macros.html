@@ -407,7 +407,7 @@
 {%- endmacro %}
 
 {% macro related_documents(related_docs) %}
-  {% if related_docs|length > 0 %}
+  {% if related_docs %}
     <section id="related-documents" class="sumo-page-section wiki-related-documents">
       <div class="text-center">
         <h2 class="sumo-page-subheading">{{ _('Related Articles') }}</h2>
