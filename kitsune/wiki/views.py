@@ -11,7 +11,8 @@ from django.contrib.auth.models import User
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db import models
+from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Q, Value, When
 from django.db.models.functions import Now, TruncDate
 from django.forms.utils import ErrorList
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
@@ -1576,7 +1577,9 @@ def delete_document(request, document_slug):
 
     # Handle confirm delete form POST
     log.warning(
-        "User {} is deleting document: {} (id={})".format(request.user, document.title, document.id)
+        "User {} is deleting document: {} (id={})".format(
+            request.user, document.title, document.id
+        )
     )
     document.delete()
 
@@ -1846,45 +1849,66 @@ def get_fallback_locale(doc, request):
 
 
 def _get_related_documents_for_locale(document, locale, user):
-    """Return visible related documents prioritizing the given locale."""
+    """Return visible related documents prioritizing the given locale.
 
-    # For translated documents, we need to check both:
-    # 1. Documents directly related to this document
-    # 2. Documents related to the parent document (inheritance)
-    documents_to_check = [document]
-    if document.parent:
-        documents_to_check.append(document.parent)
+    Assumes only parent documents (no parent field) can have related_documents.
+    For translated documents, inherit from the parent document's related_documents.
+    """
 
-    # Get all related documents from both the document and its parent (if any)
-    related_documents_query = (
+    # Get the root document (parent document) to check for related documents
+    root_document = document.parent if document.parent else document
+
+    # Single query with CASE/WHEN to prioritize locale documents and avoid N+1
+    related_docs = (
         Document.objects.visible(user)
-        .filter(related_documents__in=documents_to_check)
+        .filter(
+            Q(related_documents=root_document, locale=locale) |  # Direct locale matches
+            Q(related_documents=root_document, locale=settings.WIKI_DEFAULT_LANGUAGE,
+              translations__locale=locale, translations__isnull=False) |  # English with translations
+            Q(related_documents=root_document, locale=settings.WIKI_DEFAULT_LANGUAGE,
+              translations__isnull=True)  # English without translations
+        )
         .select_related("parent")
+        .prefetch_related(
+            models.Prefetch(
+                "translations",
+                queryset=Document.objects.visible(user).filter(locale=locale),
+                to_attr="prefetched_translations",
+            ),
+        )
+        .annotate(
+            priority=Case(
+                When(locale=locale, then=Value(1)),  # Prefer direct locale matches
+                When(translations__locale=locale, then=Value(2)),  # Then English with translations
+                default=Value(3),  # Finally English without translations
+                output_field=IntegerField(),
+            )
+        )
+        .order_by('priority', 'id')
         .distinct()
     )
 
-    def _should_include_doc(doc):
-        """Determine if a document should be included in the results."""
+    # Convert English docs to their translations where available
+    result = []
+    seen_ids = set()  # Avoid duplicates
+
+    for doc in related_docs:
         if doc.locale == locale:
-            return doc
+            if doc.id not in seen_ids:
+                result.append(doc)
+                seen_ids.add(doc.id)
+        elif doc.locale == settings.WIKI_DEFAULT_LANGUAGE:
+            prefetched_translations = getattr(doc, "prefetched_translations", [])
+            if prefetched_translations:
+                translation = prefetched_translations[0]
+                if translation.id not in seen_ids:
+                    result.append(translation)
+                    seen_ids.add(translation.id)
+            elif doc.id not in seen_ids:
+                result.append(doc)
+                seen_ids.add(doc.id)
 
-        if doc.locale == settings.WIKI_DEFAULT_LANGUAGE:
-            if translation := doc.translated_to(locale, visible_for_user=user):
-                return translation
-            return doc
-
-        if doc.parent and doc.parent.locale == settings.WIKI_DEFAULT_LANGUAGE:
-            if translation := doc.parent.translated_to(locale, visible_for_user=user):
-                return translation
-            return doc.parent
-
-        return doc if locale == doc.locale else None
-
-    return [
-        result
-        for doc in related_documents_query
-        if (result := _should_include_doc(doc)) is not None
-    ]
+    return result
 
 
 def pocket_article(request, article_id=None, document_slug=None, extra_path=None):

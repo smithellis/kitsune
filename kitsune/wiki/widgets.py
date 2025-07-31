@@ -79,13 +79,13 @@ class RelatedDocumentsWidget(forms.widgets.SelectMultiple):
         # Use related docs if provided, otherwise fall back to database query
         if self.related_documents:
             documents = self.related_documents
+        elif isinstance(value, int):
+            documents = Document.objects.select_related('parent').filter(id__in=[value])
+        elif not isinstance(value, str) and isinstance(value, Iterable):
+            # Add select_related to avoid additional queries for parent documents
+            documents = Document.objects.select_related('parent').filter(id__in=value)
         else:
-            if isinstance(value, int):
-                documents = Document.objects.filter(id__in=[value])
-            elif not isinstance(value, str) and isinstance(value, Iterable):
-                documents = Document.objects.filter(id__in=value)
-            else:
-                documents = Document.objects.none()
+            documents = Document.objects.none()
 
         return render_to_string(
             "wiki/includes/related_docs_widget.html",

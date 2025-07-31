@@ -3,6 +3,7 @@ import re
 from django import forms
 from django.conf import settings
 from django.contrib.auth.models import Group
+from django.db import models
 from django.template.defaultfilters import slugify
 from django.utils.translation import gettext_lazy as _lazy
 from django.utils.translation import ngettext_lazy as _nlazy
@@ -13,6 +14,18 @@ from kitsune.wiki.config import CATEGORIES, SIGNIFICANCES
 from kitsune.wiki.models import MAX_REVISION_COMMENT_LENGTH, Document, DraftRevision, Revision
 from kitsune.wiki.tasks import add_short_links
 from kitsune.wiki.widgets import ProductsWidget, RelatedDocumentsWidget, TopicsWidget
+
+
+class RelatedDocumentsField(forms.MultipleChoiceField):
+    """Custom field that allows invalid choices to be processed by clean method."""
+
+    def validate(self, value):
+        """Skip MultipleChoiceField validation to allow clean method to handle conversions."""
+        # Only run the base Field validation (required check),
+        # skip MultipleChoiceField's choice validation
+        if self.required and not value:
+            raise forms.ValidationError(self.error_messages['required'], code='required')
+
 
 TITLE_REQUIRED = _lazy("Please provide a title.")
 TITLE_SHORT = _lazy(
@@ -134,7 +147,7 @@ class DocumentForm(forms.ModelForm):
         widget=ProductsWidget(),
     )
 
-    related_documents = forms.MultipleChoiceField(
+    related_documents = RelatedDocumentsField(
         label=_lazy("Related documents:"), required=False, widget=RelatedDocumentsWidget()
     )
 
@@ -233,6 +246,9 @@ class DocumentForm(forms.ModelForm):
 
         super().__init__(*args, **kwargs)
 
+        # Store locale for use in clean methods
+        self._locale = locale
+
         title_field = self.fields["title"]
         title_field.initial = initial_title
 
@@ -248,7 +264,7 @@ class DocumentForm(forms.ModelForm):
         related_documents_field = self.fields["related_documents"]
         if locale:
             # Start with documents in the current locale for selection
-            locale_choices = list(
+            locale_choices_set = set(
                 Document.objects.filter(locale=locale).values_list("id", "title")
             )
 
@@ -256,10 +272,9 @@ class DocumentForm(forms.ModelForm):
             if related_documents:
                 for doc in related_documents:
                     choice = (doc.id, doc.title)
-                    if choice not in locale_choices:
-                        locale_choices.append(choice)
+                    locale_choices_set.add(choice)
 
-            related_documents_field.choices = locale_choices
+            related_documents_field.choices = list(locale_choices_set)
 
             # Update the widget with related documents for proper rendering
             if related_documents:
@@ -279,6 +294,45 @@ class DocumentForm(forms.ModelForm):
         if not can_edit_needs_change:
             del self.fields["needs_change"]
             del self.fields["needs_change_comment"]
+
+    def clean_related_documents(self):
+        """Convert English document IDs to their translations when in non-English locale."""
+        doc_ids = self.cleaned_data.get("related_documents", [])
+
+        if not self._locale or self._locale == 'en-US' or not doc_ids:
+            return doc_ids
+
+        # Bulk fetch all documents with their translations to avoid N+1 queries
+        documents_map = {}
+        docs_with_translations = (
+            Document.objects
+            .filter(id__in=doc_ids)
+            .select_related('parent')
+            .prefetch_related(
+                models.Prefetch(
+                    'translations',
+                    queryset=Document.objects.filter(locale=self._locale),
+                    to_attr='locale_translations'
+                )
+            )
+        )
+
+        for doc in docs_with_translations:
+            documents_map[str(doc.id)] = doc
+
+        corrected_ids = []
+        for doc_id in doc_ids:
+            doc = documents_map.get(doc_id)
+            if doc and doc.locale == 'en-US':
+                locale_translations = getattr(doc, 'locale_translations', [])
+                if locale_translations:
+                    corrected_ids.append(str(locale_translations[0].id))
+                else:
+                    corrected_ids.append(doc_id)
+            else:
+                corrected_ids.append(doc_id)
+
+        return corrected_ids
 
     def save(self, parent_doc, **kwargs):
         """Persist the Document form, and return the saved Document."""
