@@ -12,8 +12,26 @@ from django.views.decorators.cache import cache_page
 from kitsune import search as constants
 from kitsune.products.models import Product
 from kitsune.search.base import SumoSearchPaginator
+from kitsune.search.config import (
+    SEMANTIC_SEARCH_MIN_SCORE,
+)
 from kitsune.search.forms import SimpleSearchForm
-from kitsune.search.search import CompoundSearch, QuestionSearch, WikiSearch
+from kitsune.search.search import (
+    CompoundSearch,
+    HybridCompoundSearch,
+    HybridQuestionSearch,
+    HybridWikiSearch,
+    MultiLocaleHybridQuestionSearch,
+    MultiLocaleHybridWikiSearch,
+    MultiLocaleQuestionSearch,
+    MultiLocaleSemanticQuestionSearch,
+    MultiLocaleSemanticWikiSearch,
+    MultiLocaleWikiSearch,
+    QuestionSearch,
+    SemanticQuestionSearch,
+    SemanticWikiSearch,
+    WikiSearch,
+)
 from kitsune.search.utils import locale_or_default
 from kitsune.sumo.api_utils import JSONRenderer
 from kitsune.sumo.templatetags.jinja_helpers import Paginator as PaginatorRenderer
@@ -72,6 +90,112 @@ def _get_product_title(product_title):
     return product, product_titles
 
 
+def _create_search_multi_locale(search_type, query, locales, product, w_flags):
+    """Create appropriate multi-locale search object based on search type."""
+    search_classes = {
+        "hybrid": (MultiLocaleHybridWikiSearch, MultiLocaleHybridQuestionSearch),
+        "semantic": (MultiLocaleSemanticWikiSearch, MultiLocaleSemanticQuestionSearch),
+        "traditional": (MultiLocaleWikiSearch, MultiLocaleQuestionSearch),
+    }
+
+    if search_type not in search_classes:
+        search_type = "hybrid"
+
+    wiki_class, question_class = search_classes[search_type]
+    primary_locale = locales[0] if locales else "en-US"
+
+    has_wiki = bool(w_flags & constants.WHERE_WIKI)
+    has_questions = bool(w_flags & constants.WHERE_SUPPORT)
+
+    search = CompoundSearch()
+    if has_wiki:
+        search.add(wiki_class(
+            query=query,
+            locales=locales,
+            primary_locale=primary_locale,
+            product=product
+        ))
+    if has_questions:
+        search.add(question_class(
+            query=query,
+            locales=locales,
+            primary_locale=primary_locale,
+            product=product
+        ))
+
+    if not has_wiki and not has_questions:
+        search.add(wiki_class(
+            query=query,
+            locales=locales,
+            primary_locale=primary_locale,
+            product=product
+        ))
+        search.add(question_class(
+            query=query,
+            locales=locales,
+            primary_locale=primary_locale,
+            product=product
+        ))
+
+    return search
+
+
+def _create_search(search_type, query, locale, product, w_flags):
+    """Create appropriate search object based on search type."""
+
+    # Map search types to their corresponding classes
+    search_classes = {
+        "hybrid": (HybridWikiSearch, HybridQuestionSearch, HybridCompoundSearch),
+        "semantic": (SemanticWikiSearch, SemanticQuestionSearch, None),
+        "traditional": (WikiSearch, QuestionSearch, None),
+    }
+
+    # Default to hybrid if not specified
+    if search_type not in search_classes:
+        search_type = "hybrid"
+
+    wiki_class, question_class, compound_class = search_classes[search_type]
+
+    # Determine which content types to search
+    has_wiki = bool(w_flags & constants.WHERE_WIKI)
+    has_questions = bool(w_flags & constants.WHERE_SUPPORT)
+
+    # For hybrid search, use optimized single-type classes when possible
+    if search_type == "hybrid":
+        if has_wiki and has_questions:
+            # Both types - use compound search
+            return compound_class(query=query, locale=locale, product=product)
+        elif has_wiki:
+            # Wiki only - use direct wiki search
+            return wiki_class(query=query, locale=locale, product=product)
+        elif has_questions:
+            # Questions only - use direct question search
+            return question_class(query=query, locale=locale, product=product)
+        else:
+            # No specific flags - default to compound search
+            return compound_class(query=query, locale=locale, product=product)
+
+    # For semantic and traditional search, use CompoundSearch with appropriate classes
+    else:
+        search = CompoundSearch()
+        if has_wiki:
+            search.add(wiki_class(query=query, locale=locale, product=product))
+        if has_questions:
+            search.add(question_class(query=query, locale=locale, product=product))
+        return search
+
+
+def _execute_search_with_pagination(request, search):
+    """Execute search and apply pagination."""
+    page = paginate(
+        request,
+        search,
+        per_page=settings.SEARCH_RESULTS_PER_PAGE,
+        paginator_cls=SumoSearchPaginator,
+    )
+    return page, search.total, search.results
+
+
 def simple_search(request):
     is_json = request.GET.get("format") == "json"
     search_form = SimpleSearchForm(request.GET, auto_id=False)
@@ -95,24 +219,50 @@ def simple_search(request):
     # get product and product titles
     product, product_titles = _get_product_title(cleaned["product"])
 
-    # create search object
-    search = CompoundSearch()
+    # create search object - default to hybrid search
+    search_type = cleaned.get("search_type") or request.GET.get("search_type", "hybrid")
 
-    # apply aaq/kb configs
-    if cleaned["w"] & constants.WHERE_WIKI:
-        search.add(WikiSearch(query=cleaned["q"], locale=language, product=product))
-    if cleaned["w"] & constants.WHERE_SUPPORT:
-        search.add(QuestionSearch(query=cleaned["q"], locale=language, product=product))
+    # Allow override to traditional search if needed
+    if not getattr(settings, "USE_SEMANTIC_SEARCH", True):
+        search_type = "traditional"
 
-    # execute search
-    page = paginate(
-        request,
-        search,
-        per_page=settings.SEARCH_RESULTS_PER_PAGE,
-        paginator_cls=SumoSearchPaginator,
-    )
-    total = search.total
-    results = search.results
+    try:
+        # Stage 1: User's locale + English (if different from user's locale)
+        if language == "en-US":
+            search_locales = ["en-US"]
+        else:
+            search_locales = [language, "en-US"]
+
+        search = _create_search_multi_locale(search_type, cleaned["q"], search_locales, product, cleaned["w"])
+        page, total, results = _execute_search_with_pagination(request, search)
+
+        # For hybrid search, check if semantic component is performing well
+        if search_type == "hybrid" and total > 0 and results:
+            max_score = 1.0  # Safe default to avoid fallback
+            try:
+                # Try to extract max score from results - handle both dict and object formats
+                scores = []
+                for result in results:
+                    if isinstance(result, dict):
+                        scores.append(result.get("score", 0))
+                    elif hasattr(result, "meta") and hasattr(result.meta, "score"):
+                        scores.append(result.meta.score)
+                if scores:
+                    max_score = max(scores)
+            except (AttributeError, TypeError, ValueError):
+                pass  # Keep default max_score
+
+            if max_score < SEMANTIC_SEARCH_MIN_SCORE:
+                if language == "en-US":
+                    fallback_locales = ["en-US"]
+                else:
+                    fallback_locales = [language, "en-US"]
+                search = _create_search_multi_locale("traditional", cleaned["q"], fallback_locales, product, cleaned["w"])
+                page, total, results = _execute_search_with_pagination(request, search)
+    except Exception:
+        # Fallback to single-locale traditional search
+        search = _create_search("traditional", cleaned["q"], language, product, cleaned["w"])
+        page, total, results = _execute_search_with_pagination(request, search)
 
     # generate fallback results if necessary
     fallback_results = None

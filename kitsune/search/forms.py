@@ -33,6 +33,7 @@ class SimpleSearchForm(BaseSearchForm):
     explain = forms.BooleanField(required=False)
     all_products = forms.BooleanField(required=False)
     language = forms.CharField(required=False)
+    search_type = forms.CharField(required=False)  # hybrid, semantic, traditional
 
     product = forms.MultipleChoiceField(
         required=False, label=_lazy("Relevant to"), widget=forms.CheckboxSelectMultiple()
@@ -44,8 +45,8 @@ class SimpleSearchForm(BaseSearchForm):
         product_field = self.fields["product"]
         product_field.choices = Product.active.values_list("slug", "title")
 
-    def clean_products(self):
-        products = self.cleaned_data["products"]
+    def clean_product(self):
+        products = self.cleaned_data["product"]
         # If products were specified or all_products was set, then we return
         # the products as is.
         if products or self.cleaned_data["all_products"]:
