@@ -199,6 +199,10 @@ def index_objects_bulk(
         if not (error.get("delete") and error["delete"]["status"] in [400, 404])
     ]
     if errors:
+        # Log the first few errors for debugging
+        print(f"Bulk index errors (showing first 3 of {len(errors)}):")
+        for i, error in enumerate(errors[:3]):
+            print(f"Error {i+1}: {error}")
         raise BulkIndexError(f"{len(errors)} document(s) failed to index.", errors)
 
 

@@ -14,6 +14,7 @@ from kitsune.products.models import Product
 from kitsune.search.base import SumoSearchPaginator
 from kitsune.search.forms import SimpleSearchForm
 from kitsune.search.search import CompoundSearch, QuestionSearch, WikiSearch
+from kitsune.search.semantic_search import semantic_search_questions, semantic_search_wiki
 from kitsune.search.utils import locale_or_default
 from kitsune.sumo.api_utils import JSONRenderer
 from kitsune.sumo.templatetags.jinja_helpers import Paginator as PaginatorRenderer
@@ -96,23 +97,94 @@ def simple_search(request):
     product, product_titles = _get_product_title(cleaned["product"])
 
     # create search object
-    search = CompoundSearch()
+    if settings.USE_SEMANTIC_SEARCH:
+        try:
+            # Use semantic search
+            results_list = []
+            total_results = 0
 
-    # apply aaq/kb configs
-    if cleaned["w"] & constants.WHERE_WIKI:
-        search.add(WikiSearch(query=cleaned["q"], locale=language, product=product))
-    if cleaned["w"] & constants.WHERE_SUPPORT:
-        search.add(QuestionSearch(query=cleaned["q"], locale=language, product=product))
+            if cleaned["w"] & constants.WHERE_WIKI:
+                wiki_search = semantic_search_wiki(cleaned["q"], locale=language, size=50)
+                wiki_results = wiki_search.execute()
+                # Convert hits to properly formatted results using WikiSearch.make_result
+                wiki_search_instance = WikiSearch(query=cleaned["q"], locale=language, product=product)
+                for hit in wiki_results.hits:
+                    result = wiki_search_instance.make_result(hit)
+                    result['_score'] = hit.meta.score if hasattr(hit.meta, 'score') else 0
+                    results_list.append(result)
+                total_results += wiki_results.hits.total.value
 
-    # execute search
-    page = paginate(
-        request,
-        search,
-        per_page=settings.SEARCH_RESULTS_PER_PAGE,
-        paginator_cls=SumoSearchPaginator,
-    )
-    total = search.total
-    results = search.results
+            if cleaned["w"] & constants.WHERE_SUPPORT:
+                question_search = semantic_search_questions(cleaned["q"], locale=language, size=50)
+                question_results = question_search.execute()
+                # Convert hits to properly formatted results using QuestionSearch.make_result
+                question_search_instance = QuestionSearch(query=cleaned["q"], locale=language, product=product)
+                for hit in question_results.hits:
+                    result = question_search_instance.make_result(hit)
+                    result['_score'] = hit.meta.score if hasattr(hit.meta, 'score') else 0
+                    results_list.append(result)
+                total_results += question_results.hits.total.value
+
+            # Sort combined results by score
+            results_list.sort(key=lambda x: x.get('_score', 0), reverse=True)
+
+            # Create a mock search object for pagination compatibility
+            class SemanticSearchResults:
+                def __init__(self, results, total):
+                    self.results = results
+                    self.total = total
+
+                def __getitem__(self, key):
+                    return self.results[key]
+
+                def __len__(self):
+                    return len(self.results)
+
+            search = SemanticSearchResults(results_list, total_results)
+
+            # Apply pagination
+            page = paginate(
+                request,
+                search,
+                per_page=settings.SEARCH_RESULTS_PER_PAGE,
+                paginator_cls=SumoSearchPaginator,
+            )
+            total = total_results
+            results = page.object_list
+
+        except Exception as e:
+            log.warning(f"Semantic search failed, falling back to traditional: {e}")
+            # Fallback to traditional search
+            search = CompoundSearch()
+            if cleaned["w"] & constants.WHERE_WIKI:
+                search.add(WikiSearch(query=cleaned["q"], locale=language, product=product))
+            if cleaned["w"] & constants.WHERE_SUPPORT:
+                search.add(QuestionSearch(query=cleaned["q"], locale=language, product=product))
+
+            page = paginate(
+                request,
+                search,
+                per_page=settings.SEARCH_RESULTS_PER_PAGE,
+                paginator_cls=SumoSearchPaginator,
+            )
+            total = search.total
+            results = search.results
+    else:
+        # Use traditional search
+        search = CompoundSearch()
+        if cleaned["w"] & constants.WHERE_WIKI:
+            search.add(WikiSearch(query=cleaned["q"], locale=language, product=product))
+        if cleaned["w"] & constants.WHERE_SUPPORT:
+            search.add(QuestionSearch(query=cleaned["q"], locale=language, product=product))
+
+        page = paginate(
+            request,
+            search,
+            per_page=settings.SEARCH_RESULTS_PER_PAGE,
+            paginator_cls=SumoSearchPaginator,
+        )
+        total = search.total
+        results = search.results
 
     # generate fallback results if necessary
     fallback_results = None
