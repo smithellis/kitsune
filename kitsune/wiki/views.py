@@ -11,8 +11,12 @@ from django.contrib.auth.models import User
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
-from django.db import models
-from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Q, Value, When
+from django.db.models import (
+    Count,
+    Exists,
+    OuterRef,
+    Q,
+)
 from django.db.models.functions import Now, TruncDate
 from django.forms.utils import ErrorList
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
@@ -601,15 +605,14 @@ def edit_document_metadata(request, document_slug, revision_id=None):
     can_edit_needs_change = doc.allows(user, "edit_needs_change")
     can_archive = doc.allows(user, "archive")
 
-    # Get related docs for both initial values and form choices
+    # Get related docs for template display
     related_documents = _get_related_documents_for_locale(doc, request.LANGUAGE_CODE, request.user)
 
     doc_form = DocumentForm(
-        initial=_document_form_initial(doc, request.LANGUAGE_CODE, request.user),
+        initial=_document_form_initial(doc, request.user),
         can_archive=can_archive,
         can_edit_needs_change=can_edit_needs_change,
-        locale=request.LANGUAGE_CODE,
-        related_documents=related_documents,
+        locale=doc.locale,
     )
 
     if request.method == "POST":  # POST
@@ -623,8 +626,7 @@ def edit_document_metadata(request, document_slug, revision_id=None):
             instance=doc,
             can_archive=can_archive,
             can_edit_needs_change=can_edit_needs_change,
-            locale=request.LANGUAGE_CODE,
-            related_documents=related_documents,
+            locale=doc.locale,
         )
         if doc_form.is_valid():
             # Get the possibly new slug for the imminent redirection:
@@ -1673,17 +1675,11 @@ def show_translations(request, document_slug):
     )
 
 
-def _document_form_initial(document, locale=None, user=None):
+def _document_form_initial(document, user):
     """Return a dict with the document data pertinent for the form."""
-    # Get related documents if locale and user are provided
-    if locale and user:
-        related_documents = _get_related_documents_for_locale(document, locale, user)
-        related_document_ids = [doc.id for doc in related_documents]
-    else:
-        # Fallback to original behavior
-        related_document_ids = Document.objects.filter(related_documents=document).values_list(
-            "id", flat=True
-        )
+    related_document_ids = Document.objects.visible(
+        user, id__in=document.original.related_documents.all()
+    ).values_list("id", flat=True)
 
     return {
         "title": document.title,
@@ -1849,64 +1845,41 @@ def get_fallback_locale(doc, request):
 
 
 def _get_related_documents_for_locale(document, locale, user):
-    """Return visible related documents prioritizing the given locale.
+    """Return visible related documents prioritizing the given locale."""
 
-    Assumes only parent documents (no parent field) can have related_documents.
-    For translated documents, inherit from the parent document's related_documents.
-    """
+    related_docs = document.original.related_documents.filter(is_archived=False)
 
-    # Get the root document (parent document) to check for related documents
-    root_document = document.parent if document.parent else document
+    # Get all related document IDs
+    related_doc_ids = list(related_docs.values_list('id', flat=True))
 
-    # Single query with CASE/WHEN to prioritize locale documents and avoid N+1
-    related_docs = (
-        Document.objects.visible(user)
-        .filter(
-            Q(related_documents=root_document, locale=locale) |  # Direct locale matches
-            Q(related_documents=root_document, locale=settings.WIKI_DEFAULT_LANGUAGE,
-              translations__locale=locale, translations__isnull=False) |  # English with translations
-            Q(related_documents=root_document, locale=settings.WIKI_DEFAULT_LANGUAGE,
-              translations__isnull=True)  # English without translations
-        )
-        .select_related("parent")
-        .prefetch_related(
-            models.Prefetch(
-                "translations",
-                queryset=Document.objects.visible(user).filter(locale=locale),
-                to_attr="prefetched_translations",
-            ),
-        )
-        .annotate(
-            priority=Case(
-                When(locale=locale, then=Value(1)),  # Prefer direct locale matches
-                When(translations__locale=locale, then=Value(2)),  # Then English with translations
-                default=Value(3),  # Finally English without translations
-                output_field=IntegerField(),
-            )
-        )
-        .order_by('priority', 'id')
-        .distinct()
+    # Get translation IDs for the target locale
+    translation_ids = list(
+        Document.objects.filter(
+            parent__in=related_doc_ids,
+            locale=locale
+        ).values_list('id', flat=True)
     )
 
-    # Convert English docs to their translations where available
-    result = []
-    seen_ids = set()  # Avoid duplicates
+    # Combine original and translation IDs, then query for all visible documents
+    all_candidate_ids = related_doc_ids + translation_ids
+    all_candidates = Document.objects.visible(user, id__in=all_candidate_ids)
 
-    for doc in related_docs:
-        if doc.locale == locale:
-            if doc.id not in seen_ids:
-                result.append(doc)
-                seen_ids.add(doc.id)
-        elif doc.locale == settings.WIKI_DEFAULT_LANGUAGE:
-            prefetched_translations = getattr(doc, "prefetched_translations", [])
-            if prefetched_translations:
-                translation = prefetched_translations[0]
-                if translation.id not in seen_ids:
-                    result.append(translation)
-                    seen_ids.add(translation.id)
-            elif doc.id not in seen_ids:
-                result.append(doc)
-                seen_ids.add(doc.id)
+    # Build result list prioritizing translations over originals
+    result = []
+    seen_parents = set()
+
+    # First pass: Add translations in target locale
+    for doc in all_candidates.filter(locale=locale):
+        parent_id = doc.parent.id if doc.parent else doc.id
+        if parent_id in related_doc_ids and parent_id not in seen_parents:
+            result.append(doc)
+            seen_parents.add(parent_id)
+
+    # Second pass: Add originals that don't have translations
+    for doc in all_candidates.filter(id__in=related_doc_ids):
+        if doc.id not in seen_parents:
+            result.append(doc)
+            seen_parents.add(doc.id)
 
     return result
 
