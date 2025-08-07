@@ -9,7 +9,7 @@ from elasticsearch.dsl import Q as DSLQ
 from pyparsing import ParseException
 
 from kitsune.products.models import Product
-from kitsune.search import HIGHLIGHT_TAG, SNIPPET_LENGTH
+from kitsune.search import HIGHLIGHT_TAG, SNIPPET_LENGTH, config
 from kitsune.search.base import SumoSearch
 from kitsune.search.documents import (
     ForumDocument,
@@ -470,3 +470,159 @@ class SemanticQuestionSearch(QuestionSearch):
         answer_query = _build_semantic_query('answer_content_semantic', self.query, self.locale)
 
         return title_query | content_query | answer_query
+
+
+@dataclass
+class HybridSearch(SumoSearch):
+    """
+    Base class for hybrid search combining semantic and traditional text search.
+    Supports all existing advanced search syntax while adding semantic capabilities.
+    """
+
+    semantic_weight: float | None = None
+
+    def __post_init__(self):
+        if self.semantic_weight is None:
+            self.semantic_weight = getattr(config, 'HYBRID_SEARCH_SEMANTIC_WEIGHT', 0.6)
+        self.text_weight = 1.0 - self.semantic_weight
+        self.min_semantic_score = getattr(config, 'SEMANTIC_SEARCH_MIN_SCORE', 0.5)
+        # Initialize parser for query parsing
+        self.parser = Parser(self.query) if self.query else None
+
+    def build_query(self):
+        """Build hybrid query combining semantic and traditional text search."""
+        if not self.query:
+            return DSLQ("match_all")
+
+        # Parse query using existing Parser (preserves ALL advanced syntax)
+        try:
+            parsed_query = self.parser.parse() if self.parser else self.query
+        except (ParseException, AttributeError):
+            # Fallback to simple query if parsing fails
+            parsed_query = self.query
+
+        # Build traditional text query with full advanced syntax support
+        text_query = self._build_text_query(parsed_query)
+
+        # Build semantic query from cleaned query text (no field operators)
+        semantic_query = self._build_semantic_query()
+
+        # Apply minimum score filter to semantic component if configured
+        if self.min_semantic_score and self.min_semantic_score > 0:
+            semantic_query = DSLQ('bool', must=[
+                semantic_query,
+                DSLQ('range', **{'_score': {'gte': self.min_semantic_score}})
+            ])
+
+        # Combine with weights
+        return DSLQ('bool', should=[
+            DSLQ('constant_score', filter=semantic_query, boost=self.semantic_weight),
+            DSLQ('constant_score', filter=text_query, boost=self.text_weight)
+        ])
+
+    def _build_semantic_query(self):
+        """Build semantic query from cleaned query text."""
+        clean_query = self._get_clean_query_text()
+        if not clean_query:
+            # If no clean text, return empty query (won't match anything)
+            return DSLQ('match_none')
+        return self._build_semantic_fields_query(clean_query)
+
+    def _get_clean_query_text(self):
+        """Extract semantic-meaningful text from query, removing field operators."""
+        import re
+        # Remove field operators like "title:firefox", "updated:>2023-01-01", "category:troubleshooting"
+        cleaned = re.sub(r'\b\w+:[^\s]+', '', self.query)
+        # Remove boolean operators
+        cleaned = re.sub(r'\b(AND|OR|NOT)\b', '', cleaned, flags=re.IGNORECASE)
+        # Clean up extra whitespace
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        return cleaned if cleaned else None
+
+    def _build_semantic_fields_query(self, clean_query):
+        """Build semantic query across relevant fields. Must be implemented by subclasses."""
+        raise NotImplementedError("Subclasses must implement semantic fields query")
+
+    def _build_text_query(self, parsed_query):
+        """Build traditional text query with full advanced syntax support. Must be implemented by subclasses."""
+        raise NotImplementedError("Subclasses must implement text query building")
+
+
+@dataclass
+class HybridWikiSearch(HybridSearch, WikiSearch):
+    """Hybrid search for wiki documents combining semantic and traditional text search."""
+
+    def _build_semantic_fields_query(self, clean_query):
+        """Build semantic query across wiki semantic fields."""
+        title_query = _build_semantic_query('title_semantic', clean_query, self.locale)
+        content_query = _build_semantic_query('content_semantic', clean_query, self.locale)
+        summary_query = _build_semantic_query('summary_semantic', clean_query, self.locale)
+        keywords_query = _build_semantic_query('keywords_semantic', clean_query, self.locale)
+
+        return title_query | content_query | summary_query | keywords_query
+
+    def _build_text_query(self, parsed_query):
+        """Build traditional text query using WikiSearch logic."""
+        # Create a temporary WikiSearch instance to reuse existing query building logic
+        wiki_search = WikiSearch(query=str(parsed_query), locale=self.locale, product=self.product)
+        if self.parser:
+            wiki_search.parser = self.parser  # Use the same parser instance
+        return wiki_search.build_query()
+
+
+@dataclass
+class HybridQuestionSearch(HybridSearch, QuestionSearch):
+    """Hybrid search for question documents combining semantic and traditional text search."""
+
+    def _build_semantic_fields_query(self, clean_query):
+        """Build semantic query across question semantic fields."""
+        title_query = _build_semantic_query('question_title_semantic', clean_query, self.locale)
+        content_query = _build_semantic_query('question_content_semantic', clean_query, self.locale)
+        answer_query = _build_semantic_query('answer_content_semantic', clean_query, self.locale)
+
+        return title_query | content_query | answer_query
+
+    def _build_text_query(self, parsed_query):
+        """Build traditional text query using QuestionSearch logic."""
+        # Create a temporary QuestionSearch instance to reuse existing query building logic
+        question_search = QuestionSearch(query=str(parsed_query), locale=self.locale, product=self.product)
+        if self.parser:
+            question_search.parser = self.parser  # Use the same parser instance
+        return question_search.build_query()
+
+
+class HybridCompoundSearch(CompoundSearch):
+    """
+    Hybrid compound search across wiki and question documents.
+    Maintains same result mixing as existing CompoundSearch while adding semantic capabilities.
+    """
+
+    def __init__(self, query=None, locale='en-US', product=None, semantic_weight=None, wiki_weight=0.5):
+        # Initialize as CompoundSearch
+        super().__init__(query=query)
+
+        # Set up hybrid-specific attributes
+        self.locale = locale
+        self.product = product
+        self.semantic_weight = semantic_weight or getattr(config, 'HYBRID_SEARCH_SEMANTIC_WEIGHT', 0.6)
+        self.wiki_weight = wiki_weight
+        self.question_weight = 1.0 - wiki_weight
+
+        # Initialize hybrid child searches instead of regular ones
+        self._hybrid_wiki_search = HybridWikiSearch(
+            query=query,
+            locale=locale,
+            product=product,
+            semantic_weight=self.semantic_weight
+        )
+        self._hybrid_question_search = HybridQuestionSearch(
+            query=query,
+            locale=locale,
+            product=product,
+            semantic_weight=self.semantic_weight
+        )
+
+        # Add hybrid searches as children for CompoundSearch compatibility
+        self.add(self._hybrid_wiki_search)
+        self.add(self._hybrid_question_search)
+
