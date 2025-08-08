@@ -38,7 +38,7 @@ class TermToken(BaseToken):
         return DSLQ(
             "simple_query_string",
             query=self.term,
-            default_operator="AND",
+            default_operator="OR",
             fields=context["fields"],
         )
 
