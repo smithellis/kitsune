@@ -40,7 +40,6 @@ class TermToken(BaseToken):
             query=self.term,
             default_operator="AND",
             fields=context["fields"],
-            flags="PHRASE",
         )
 
 

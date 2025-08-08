@@ -174,7 +174,16 @@ def simple_search(request):
 
         # For hybrid search, check if semantic component is performing well
         if search_type == "hybrid" and total > 0 and results:
-            max_score = max(result.meta.score for result in results)
+            # Results are dictionaries after make_result(), so access score key directly
+            try:
+                max_score = max(result.get("score", 0) for result in results if isinstance(result, dict))
+            except (AttributeError, TypeError, ValueError):
+                # Fallback: if results are still hit objects, try accessing meta.score
+                try:
+                    max_score = max(result.meta.score for result in results)
+                except AttributeError:
+                    max_score = 1.0  # Safe default to avoid fallback
+
             if max_score < SEMANTIC_SEARCH_MIN_SCORE:
                 log.info(f"Hybrid search max score {max_score} below threshold {SEMANTIC_SEARCH_MIN_SCORE}, falling back to traditional")
                 search = _create_search("traditional", cleaned["q"], language, product, cleaned["w"], semantic_weight)

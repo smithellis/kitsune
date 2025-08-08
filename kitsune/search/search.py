@@ -514,10 +514,13 @@ class HybridSearch(SumoSearch):
                 DSLQ('range', **{'_score': {'gte': self.min_semantic_score}})
             ])
 
-        # Combine with weights
+        # Combine with weights using direct boost to preserve semantic similarity scores
+        semantic_query_boosted = DSLQ('bool', must=[semantic_query], boost=self.semantic_weight)
+        text_query_boosted = DSLQ('bool', must=[text_query], boost=self.text_weight)
+
         return DSLQ('bool', should=[
-            DSLQ('constant_score', filter=semantic_query, boost=self.semantic_weight),
-            DSLQ('constant_score', filter=text_query, boost=self.text_weight)
+            semantic_query_boosted,
+            text_query_boosted
         ])
 
     def _build_semantic_query(self):
@@ -558,7 +561,6 @@ class HybridWikiSearch(HybridSearch, WikiSearch):
         content_query = _build_semantic_query('content_semantic', clean_query, self.locale)
         summary_query = _build_semantic_query('summary_semantic', clean_query, self.locale)
         keywords_query = _build_semantic_query('keywords_semantic', clean_query, self.locale)
-
         return title_query | content_query | summary_query | keywords_query
 
     def _build_text_query(self, parsed_query):
