@@ -776,3 +776,273 @@ class HybridCompoundSearch(HybridSearch):
             "num_answers": len(answer_content[self.locale]) if answer_content else 0,
             "num_votes": hit.question_num_votes,
         }
+
+
+
+# Multi-locale search classes
+
+@dataclass
+class MultiLocaleWikiSearch(WikiSearch):
+    """Wiki search across multiple locales with preference weighting."""
+    locales: list[str] = dfield(default_factory=lambda: ["en-US"])
+    primary_locale: str = "en-US"
+
+    def get_fields(self):
+        fields = []
+        for i, locale in enumerate(self.locales):
+            base_boost = 8 - (i * 2)
+            boost = max(base_boost, 1)
+            fields.extend([
+                f"keywords.{locale}^{boost + 2}",
+                f"title.{locale}^{boost + 1}",
+                f"summary.{locale}^{boost}",
+                f"content.{locale}^{max(boost-2, 1)}"
+            ])
+        return fields
+
+    def get_filter(self):
+        locale_queries = [DSLQ("exists", field=f"title.{locale}") for locale in self.locales]
+        filters = [
+            DSLQ("term", _index=self.get_index()),
+            DSLQ("bool", should=locale_queries, minimum_should_match=1)
+        ]
+        if self.product:
+            filters.append(DSLQ("term", product_ids=self.product.id))
+        return DSLQ("bool", filter=filters, must=self.build_query())
+
+    def make_result(self, hit):
+        detected_locale = self._detect_result_locale(hit)
+        title = self._get_best_field_value(hit, "title")
+        summary = self._get_best_summary(hit)
+
+        return {
+            "type": "document",
+            "url": reverse("wiki.document", args=[hit.slug[detected_locale]], locale=detected_locale),
+            "score": hit.meta.score,
+            "title": title,
+            "search_summary": summary,
+            "id": hit.meta.id,
+            "result_locale": detected_locale,
+            "is_fallback_locale": detected_locale != self.primary_locale,
+        }
+
+    def _detect_result_locale(self, hit):
+        for locale in self.locales:
+            if hasattr(hit.title, locale) and getattr(hit.title, locale):
+                return locale
+        return self.locales[0]
+
+    def _get_best_field_value(self, hit, field_name):
+        field_obj = getattr(hit, field_name)
+        for locale in self.locales:
+            if hasattr(field_obj, locale) and getattr(field_obj, locale):
+                return getattr(field_obj, locale)
+        return ""
+
+    def _get_best_summary(self, hit):
+        summary = first_highlight(hit)
+        if not summary and hasattr(hit, "summary"):
+            for locale in self.locales:
+                if hasattr(hit.summary, locale) and getattr(hit.summary, locale):
+                    summary = getattr(hit.summary, locale)
+                    break
+        if not summary:
+            for locale in self.locales:
+                if hasattr(hit.content, locale) and getattr(hit.content, locale):
+                    summary = getattr(hit.content, locale)[:SNIPPET_LENGTH]
+                    break
+        return strip_html(summary) if summary else ""
+
+
+@dataclass
+class MultiLocaleQuestionSearch(QuestionSearch):
+    """Question search across multiple locales with preference weighting."""
+    locales: list[str] = dfield(default_factory=lambda: ["en-US"])
+    primary_locale: str = "en-US"
+
+    def get_fields(self):
+        fields = []
+        for i, locale in enumerate(self.locales):
+            base_boost = 8 - (i * 2)
+            boost = max(base_boost, 1)
+            fields.extend([
+                f"question_title.{locale}^{boost}",
+                f"question_content.{locale}^{max(boost-2, 1)}",
+                f"answer_content.{locale}^{max(boost-2, 1)}"
+            ])
+        return fields
+
+    def get_filter(self):
+        locale_queries = [DSLQ("exists", field=f"question_title.{locale}") for locale in self.locales]
+        filters = [
+            DSLQ("term", _index=self.get_index()),
+            DSLQ("bool", should=locale_queries, minimum_should_match=1),
+            DSLQ("range", question_created={"gte": datetime.now(UTC) - timedelta(days=QUESTION_DAYS_DELTA)}),
+        ]
+
+        if self.is_simple_search():
+            filters.append(DSLQ("term", question_is_archived=False))
+
+        if self.product:
+            filters.append(DSLQ("term", question_product_id=self.product.id))
+
+        return DSLQ("bool", filter=filters, must_not=DSLQ("exists", field="updated"), must=self.build_query())
+
+    def make_result(self, hit):
+        detected_locale = self._detect_result_locale(hit)
+        title = self._get_best_field_value(hit, "question_title")
+        summary = self._get_best_summary(hit)
+
+        answer_content = getattr(hit, "answer_content", None)
+        num_answers = 0
+        if answer_content:
+            for locale in self.locales:
+                if hasattr(answer_content, locale) and getattr(answer_content, locale):
+                    num_answers = len(getattr(answer_content, locale))
+                    break
+
+        return {
+            "type": "question",
+            "url": reverse("questions.details", kwargs={"question_id": hit.question_id}),
+            "score": hit.meta.score,
+            "title": title,
+            "search_summary": summary,
+            "last_updated": datetime.fromisoformat(hit.question_updated),
+            "is_solved": hit.question_has_solution,
+            "num_answers": num_answers,
+            "num_votes": hit.question_num_votes,
+            "result_locale": detected_locale,
+            "is_fallback_locale": detected_locale != self.primary_locale,
+        }
+
+    def _detect_result_locale(self, hit):
+        for locale in self.locales:
+            if hasattr(hit.question_title, locale) and getattr(hit.question_title, locale):
+                return locale
+        return self.locales[0]
+
+    def _get_best_field_value(self, hit, field_name):
+        field_obj = getattr(hit, field_name)
+        for locale in self.locales:
+            if hasattr(field_obj, locale) and getattr(field_obj, locale):
+                return getattr(field_obj, locale)
+        return ""
+
+    def _get_best_summary(self, hit):
+        summary = first_highlight(hit)
+        if not summary:
+            for locale in self.locales:
+                content_field = "question_content"
+                if hasattr(hit, content_field) and hasattr(getattr(hit, content_field), locale):
+                    content = getattr(getattr(hit, content_field), locale)
+                    if content:
+                        summary = content[:SNIPPET_LENGTH]
+                        break
+        return strip_html(summary) if summary else ""
+
+
+@dataclass
+class MultiLocaleSemanticWikiSearch(MultiLocaleWikiSearch):
+    """Multi-locale semantic wiki search."""
+    def build_query(self):
+        if not self.query:
+            return DSLQ("match_all")
+
+        queries = []
+        for i, locale in enumerate(self.locales):
+            boost = 8 - (i * 2)
+            boost = max(boost, 1)
+            title_q = DSLQ("semantic", field=f"title_semantic.{locale}", query=self.query, boost=boost+1)
+            content_q = DSLQ("semantic", field=f"content_semantic.{locale}", query=self.query, boost=boost)
+            summary_q = DSLQ("semantic", field=f"summary_semantic.{locale}", query=self.query, boost=boost)
+            queries.extend([title_q, content_q, summary_q])
+
+        return DSLQ("bool", should=queries, minimum_should_match=1)
+
+
+@dataclass
+class MultiLocaleSemanticQuestionSearch(MultiLocaleQuestionSearch):
+    """Multi-locale semantic question search."""
+    def build_query(self):
+        if not self.query:
+            return DSLQ("match_all")
+
+        queries = []
+        for i, locale in enumerate(self.locales):
+            boost = 8 - (i * 2)
+            boost = max(boost, 1)
+            title_q = DSLQ("semantic", field=f"question_title_semantic.{locale}", query=self.query, boost=boost)
+            content_q = DSLQ("semantic", field=f"question_content_semantic.{locale}", query=self.query, boost=max(boost-2, 1))
+            answer_q = DSLQ("semantic", field=f"answer_content_semantic.{locale}", query=self.query, boost=max(boost-2, 1))
+            queries.extend([title_q, content_q, answer_q])
+
+        return DSLQ("bool", should=queries, minimum_should_match=1)
+
+
+@dataclass
+class MultiLocaleHybridWikiSearch(HybridSearch, MultiLocaleWikiSearch):
+    """Multi-locale hybrid wiki search combining semantic + traditional across languages."""
+    def _build_semantic_retriever(self):
+        if not self.query:
+            return None
+
+        queries = []
+        for locale in self.locales:
+            title_q = DSLQ("semantic", field=f"title_semantic.{locale}", query=self.query)
+            content_q = DSLQ("semantic", field=f"content_semantic.{locale}", query=self.query)
+            summary_q = DSLQ("semantic", field=f"summary_semantic.{locale}", query=self.query)
+            queries.extend([title_q, content_q, summary_q])
+
+        return DSLQ("bool", should=queries, minimum_should_match=1)
+
+    def _build_text_retriever(self):
+        all_fields = self.get_fields()
+        return DSLQ("multi_match", query=self.query, fields=all_fields)
+
+    def _get_filters_only(self):
+        locale_queries = [DSLQ("exists", field=f"title.{locale}") for locale in self.locales]
+        filters = [
+            DSLQ("term", _index=self.get_index()),
+            DSLQ("bool", should=locale_queries, minimum_should_match=1)
+        ]
+        if self.product:
+            filters.append(DSLQ("term", product_ids=self.product.id))
+        return filters
+
+
+@dataclass
+class MultiLocaleHybridQuestionSearch(HybridSearch, MultiLocaleQuestionSearch):
+    """Multi-locale hybrid question search combining semantic + traditional across languages."""
+    def _build_semantic_retriever(self):
+        if not self.query:
+            return None
+
+        queries = []
+        for locale in self.locales:
+            title_q = DSLQ("semantic", field=f"question_title_semantic.{locale}", query=self.query)
+            content_q = DSLQ("semantic", field=f"question_content_semantic.{locale}", query=self.query)
+            answer_q = DSLQ("semantic", field=f"answer_content_semantic.{locale}", query=self.query)
+            queries.extend([title_q, content_q, answer_q])
+
+        return DSLQ("bool", should=queries, minimum_should_match=1)
+
+    def _build_text_retriever(self):
+        all_fields = self.get_fields()
+        return DSLQ("multi_match", query=self.query, fields=all_fields)
+
+    def _get_filters_only(self):
+        locale_queries = [DSLQ("exists", field=f"question_title.{locale}") for locale in self.locales]
+        filters = [
+            DSLQ("term", _index=self.get_index()),
+            DSLQ("bool", should=locale_queries, minimum_should_match=1),
+            DSLQ("range", question_created={"gte": datetime.now(UTC) - timedelta(days=QUESTION_DAYS_DELTA)}),
+            DSLQ("bool", must_not=DSLQ("exists", field="updated")),
+        ]
+
+        if hasattr(self, 'is_simple_search') and self.is_simple_search():
+            filters.append(DSLQ("term", question_is_archived=False))
+
+        if self.product:
+            filters.append(DSLQ("term", question_product_id=self.product.id))
+
+        return filters

@@ -379,3 +379,7 @@ DEFAULT_ES_REFRESH_INTERVAL = "60s"
 # If the best result score is below this threshold, fallback to traditional search
 SEMANTIC_SEARCH_MIN_SCORE = 2.5
 
+# Multi-locale search fallback configuration
+SEARCH_FALLBACK_MIN_RESULTS = 5
+SEARCH_FALLBACK_ENABLED = True
+

@@ -12,13 +12,23 @@ from django.views.decorators.cache import cache_page
 from kitsune import search as constants
 from kitsune.products.models import Product
 from kitsune.search.base import SumoSearchPaginator
-from kitsune.search.config import SEMANTIC_SEARCH_MIN_SCORE
+from kitsune.search.config import (
+    SEARCH_FALLBACK_ENABLED,
+    SEARCH_FALLBACK_MIN_RESULTS,
+    SEMANTIC_SEARCH_MIN_SCORE,
+)
 from kitsune.search.forms import SimpleSearchForm
 from kitsune.search.search import (
     CompoundSearch,
     HybridCompoundSearch,
     HybridQuestionSearch,
     HybridWikiSearch,
+    MultiLocaleHybridQuestionSearch,
+    MultiLocaleHybridWikiSearch,
+    MultiLocaleQuestionSearch,
+    MultiLocaleSemanticQuestionSearch,
+    MultiLocaleSemanticWikiSearch,
+    MultiLocaleWikiSearch,
     QuestionSearch,
     SemanticQuestionSearch,
     SemanticWikiSearch,
@@ -80,6 +90,56 @@ def _get_product_title(product_title):
     else:
         product_titles = [_("All Products")]
     return product, product_titles
+
+
+def _create_search_multi_locale(search_type, query, locales, product, w_flags):
+    """Create appropriate multi-locale search object based on search type."""
+    search_classes = {
+        "hybrid": (MultiLocaleHybridWikiSearch, MultiLocaleHybridQuestionSearch),
+        "semantic": (MultiLocaleSemanticWikiSearch, MultiLocaleSemanticQuestionSearch),
+        "traditional": (MultiLocaleWikiSearch, MultiLocaleQuestionSearch),
+    }
+
+    if search_type not in search_classes:
+        search_type = "hybrid"
+
+    wiki_class, question_class = search_classes[search_type]
+    primary_locale = locales[0] if locales else "en-US"
+
+    has_wiki = bool(w_flags & constants.WHERE_WIKI)
+    has_questions = bool(w_flags & constants.WHERE_SUPPORT)
+
+    search = CompoundSearch()
+    if has_wiki:
+        search.add(wiki_class(
+            query=query,
+            locales=locales,
+            primary_locale=primary_locale,
+            product=product
+        ))
+    if has_questions:
+        search.add(question_class(
+            query=query,
+            locales=locales,
+            primary_locale=primary_locale,
+            product=product
+        ))
+
+    if not has_wiki and not has_questions:
+        search.add(wiki_class(
+            query=query,
+            locales=locales,
+            primary_locale=primary_locale,
+            product=product
+        ))
+        search.add(question_class(
+            query=query,
+            locales=locales,
+            primary_locale=primary_locale,
+            product=product
+        ))
+
+    return search
 
 
 def _create_search(search_type, query, locale, product, w_flags):
@@ -169,8 +229,23 @@ def simple_search(request):
         search_type = "traditional"
 
     try:
-        search = _create_search(search_type, cleaned["q"], language, product, cleaned["w"])
+        # Stage 1: User's locale + English (if different from user's locale)
+        if language == "en-US":
+            search_locales = ["en-US"]
+        else:
+            search_locales = [language, "en-US"]
+
+        search = _create_search_multi_locale(search_type, cleaned["q"], search_locales, product, cleaned["w"])
         page, total, results = _execute_search_with_pagination(request, search)
+
+        # Stage 2: If insufficient results and fallback is enabled, search all supported locales
+        if (SEARCH_FALLBACK_ENABLED and
+            total < SEARCH_FALLBACK_MIN_RESULTS and
+            len(search_locales) < len(settings.SUMO_LANGUAGES)):
+
+            all_locales = list(settings.SUMO_LANGUAGES)
+            search = _create_search_multi_locale(search_type, cleaned["q"], all_locales, product, cleaned["w"])
+            page, total, results = _execute_search_with_pagination(request, search)
 
         # For hybrid search, check if semantic component is performing well
         if search_type == "hybrid" and total > 0 and results:
@@ -183,9 +258,14 @@ def simple_search(request):
                     max_score = 1.0  # Safe default to avoid fallback
 
             if max_score < SEMANTIC_SEARCH_MIN_SCORE:
-                search = _create_search("traditional", cleaned["q"], language, product, cleaned["w"])
+                if language == "en-US":
+                    fallback_locales = ["en-US"]
+                else:
+                    fallback_locales = [language, "en-US"]
+                search = _create_search_multi_locale("traditional", cleaned["q"], fallback_locales, product, cleaned["w"])
                 page, total, results = _execute_search_with_pagination(request, search)
     except Exception:
+        # Fallback to single-locale traditional search
         search = _create_search("traditional", cleaned["q"], language, product, cleaned["w"])
         page, total, results = _execute_search_with_pagination(request, search)
 
