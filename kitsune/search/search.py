@@ -1,11 +1,24 @@
-from dataclasses import dataclass
-from dataclasses import field as dfield
+"""
+Simplified search module with hybrid search as default.
+
+This module provides a clean, DRY search architecture that supports hybrid (semantic + traditional)
+search with automatic fallback for advanced syntax.
+"""
+
+import logging
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import Self
 
 import bleach
 from dateutil import parser
+from django.conf import settings
 from django.utils.text import slugify
+from elasticsearch import RequestError
 from elasticsearch.dsl import Q as DSLQ
+from elasticsearch.dsl.query import Query
+from elasticsearch.dsl.utils import AttrDict
 from pyparsing import ParseException
 
 from kitsune.products.models import Product
@@ -17,6 +30,7 @@ from kitsune.search.documents import (
     QuestionDocument,
     WikiDocument,
 )
+from kitsune.search.es_utils import es_client
 from kitsune.search.parser import Parser
 from kitsune.search.parser.operators import (
     AndOperator,
@@ -30,24 +44,20 @@ from kitsune.sumo.urlresolvers import reverse
 from kitsune.wiki.config import CATEGORIES
 from kitsune.wiki.parser import wiki_to_html
 
+log = logging.getLogger("k.search")
+
 QUESTION_DAYS_DELTA = 365 * 2
 FVH_HIGHLIGHT_OPTIONS = {
     "type": "fvh",
-    # order highlighted fragments by their relevance:
     "order": "score",
-    # only get one fragment per field:
     "number_of_fragments": 1,
-    # split fragments at the end of sentences:
     "boundary_scanner": "sentence",
-    # return fragments roughly this size:
     "fragment_size": SNIPPET_LENGTH,
-    # add these tags before/after the highlighted sections:
     "pre_tags": [f"<{HIGHLIGHT_TAG}>"],
     "post_tags": [f"</{HIGHLIGHT_TAG}>"],
 }
 CATEGORY_EXACT_MAPPING = {
     "dict": {
-        # `name` is lazy, using str() to force evaluation:
         slugify(str(name)): _id
         for _id, name in CATEGORIES
     },
@@ -56,17 +66,15 @@ CATEGORY_EXACT_MAPPING = {
 
 
 def first_highlight(hit):
+    """Get the first highlight from a search hit."""
     highlight = getattr(hit.meta, "highlight", None)
     if highlight:
-        # `highlight` is of type AttrDict, which is internal to elasticsearch_dsl
-        # when converted to a dict, it's like:
-        # `{ 'es_field_name' : ['highlight1', 'highlight2'], 'field2': ... }`
-        # so here we're getting the first item in the first value in that dict:
         return next(iter(highlight.to_dict().values()))[0]
     return None
 
 
 def strip_html(summary):
+    """Strip HTML from summary except highlight tags."""
     return bleach.clean(
         summary,
         tags=[HIGHLIGHT_TAG],
@@ -79,50 +87,358 @@ def same_base_index(a, b):
     return a.split("_")[:-1] == b.split("_")[:-1]
 
 
+class RRFQuery(Query):
+    """Custom Query wrapper for RRF (Reciprocal Rank Fusion) queries."""
+    name = 'rrf'
+
+    def __init__(self, query_dict, **kwargs):
+        self._query_dict = query_dict
+        super().__init__(**kwargs)
+
+    def to_dict(self):
+        return self._query_dict
+
+
 @dataclass
-class QuestionSearch(SumoSearch):
-    """Search over questions."""
+class SearchContext:
+    """Encapsulates all search parameters and context for strategies."""
+    query: str = ""
+    locales: list[str] = field(default_factory=lambda: ["en-US"])
+    document_types: list[str] = field(default_factory=lambda: ["wiki", "questions"])
+    primary_locale: str = "en-US"
+    product: "Product | None" = None
+    parse_query: bool = True
 
-    locale: str = "en-US"
-    product: Product | None = None
+    # Cached values from UnifiedSearch - accessed directly
+    fields: list[str] = field(default_factory=list, init=False)
+    semantic_fields: list[str] = field(default_factory=list, init=False)
+    settings: dict = field(default_factory=dict, init=False)
 
-    def get_index(self):
-        return QuestionDocument.Index.read_alias
 
-    def get_fields(self):
-        return [
-            # ^x boosts the score from that field by x amount
-            f"question_title.{self.locale}^2",
-            f"question_content.{self.locale}",
-            f"answer_content.{self.locale}",
-        ]
+class SearchStrategy(ABC):
+    """Abstract base class for search strategies."""
 
-    def get_settings(self):
-        return {
-            "field_mappings": {
-                "title": f"question_title.{self.locale}",
-                "content": [f"question_content.{self.locale}", f"answer_content.{self.locale}"],
-                "question": f"question_content.{self.locale}",
-                "answer": f"answer_content.{self.locale}",
-            },
-            "range_allowed": [
-                "question_created",
-                "question_updated",
-                "question_taken_until",
-                "question_num_votes",
-            ],
+    def __init__(self, context: SearchContext):
+        self.context = context
+
+    @abstractmethod
+    def build_query(self):
+        """Build the appropriate query for this search strategy."""
+        pass
+
+    @abstractmethod
+    def supports_advanced_syntax(self) -> bool:
+        """Whether this strategy supports advanced query syntax."""
+        pass
+
+    def get_fallback_strategy(self) -> "SearchStrategy":
+        """Get fallback strategy if this one fails. Default to Traditional."""
+        # Import here to avoid circular imports
+        return TraditionalSearchStrategy(self.context)
+
+
+class TraditionalSearchStrategy(SearchStrategy):
+    """Traditional BM25 text search strategy."""
+
+    def build_query(self):
+        """Build traditional text search query."""
+        if not self.context.query:
+            return DSLQ("match_all")
+
+        # Handle advanced query parsing
+        if self.context.parse_query:
+            try:
+                parsed = Parser(self.context.query)
+                return parsed.elastic_query({
+                    "fields": self.context.fields,
+                    "settings": self.context.settings
+                })
+            except ParseException:
+                pass
+
+        # For simple queries, use stricter matching
+        terms = self.context.query.split()
+
+        # Check for gibberish
+        term_token = TermToken(self.context.query)
+        if len(terms) == 1 and term_token._is_likely_gibberish(terms[0].lower()):
+            return DSLQ("bool", must_not=DSLQ("match_all"))
+
+        # Use multi_match for better relevance with stricter settings
+        query_params = {
+            "query": self.context.query,
+            "fields": self.context.fields,
+            "type": "best_fields",  # Prefer documents where all terms appear in same field
+            "operator": "AND" if len(terms) <= 3 else "OR",  # Stricter for short queries
         }
 
+        # Stricter minimum_should_match for OR queries
+        if query_params["operator"] == "OR" and len(terms) > 1:
+            if len(terms) == 2:
+                query_params["minimum_should_match"] = "100%"  # Both terms must match
+            elif len(terms) == 3:
+                query_params["minimum_should_match"] = "75%"   # At least 2 of 3
+            else:
+                query_params["minimum_should_match"] = "65%"   # Stricter than before
+
+        return DSLQ("multi_match", **query_params)
+
+    def supports_advanced_syntax(self) -> bool:
+        """Traditional search supports advanced syntax."""
+        return True
+
+    def get_fallback_strategy(self) -> "SearchStrategy":
+        """Traditional is the fallback, so return self."""
+        return self
+
+
+
+
+class HybridRRFSearchStrategy(SearchStrategy):
+    """Hybrid search strategy using Reciprocal Rank Fusion."""
+
+    def build_query(self):
+        """Build RRF hybrid query combining semantic and traditional search."""
+        if not self.context.query:
+            return DSLQ("match_all")
+
+        # Build traditional and semantic sub-queries
+        traditional_strategy = TraditionalSearchStrategy(self.context)
+        traditional_query = traditional_strategy.build_query()
+        semantic_query = self._build_semantic_query()
+
+        # Create RRF query
+        rrf_query = {
+            "retriever": {
+                "rrf": {
+                    "retrievers": [
+                        {"standard": {"query": traditional_query.to_dict()}},
+                        {"standard": {"query": semantic_query.to_dict()}}
+                    ],
+                    "rank_window_size": settings.SEARCH_RRF_WINDOW_SIZE if settings.SEARCH_STRICT_RELEVANCE else settings.RRF_WINDOW_MAX_SIZE,
+                    "rank_constant": settings.SEARCH_RRF_RANK_CONSTANT if settings.SEARCH_STRICT_RELEVANCE else settings.RRF_RANK_CONSTANT
+                }
+            }
+        }
+
+        return RRFQuery(rrf_query)
+
+    def _build_semantic_query(self):
+        """Build semantic search query using semantic fields."""
+        if not self.context.query:
+            return DSLQ("match_all")
+
+        # Check for gibberish before building semantic queries
+        term_token = TermToken(self.context.query)
+        if term_token._is_likely_gibberish(self.context.query.lower()):
+            # Return a query that matches nothing for gibberish
+            return DSLQ("bool", must_not=DSLQ("match_all"))
+
+        semantic_queries = []
+        semantic_fields = self.context.semantic_fields
+
+        # Build semantic queries with proper locale handling and boosts
+        for locale in self.context.locales:
+            for field_name in semantic_fields:
+                semantic_field = f"{field_name}_semantic.{locale}"
+                boost = self._get_semantic_field_boost(field_name, locale)
+                semantic_queries.append(
+                    DSLQ("semantic", field=semantic_field, query=self.context.query, boost=boost)
+                )
+
+        if not semantic_queries:
+            # Fallback to traditional if no semantic fields available
+            return TraditionalSearchStrategy(self.context).build_query()
+
+        # Require matches in multiple fields for better relevance
+        # For short queries, require more matches
+        terms = self.context.query.split()
+        if len(terms) <= 2:
+            min_should_match = max(2, len(semantic_queries) // 4)  # At least 25% of fields
+        else:
+            min_should_match = max(1, len(semantic_queries) // 6)  # At least 16% of fields
+
+        return DSLQ("bool", should=semantic_queries, minimum_should_match=min_should_match)
+
+    def _get_semantic_field_boost(self, field: str, locale: str) -> float:
+        """Get boost value for semantic fields."""
+        locale_boost = 1.5 if locale == self.context.primary_locale else 1.0
+
+        if "title" in field:
+            return 6.0 * locale_boost
+        elif "summary" in field:
+            return 4.0 * locale_boost
+        else:
+            return 2.0 * locale_boost
+
+    def supports_advanced_syntax(self) -> bool:
+        """Hybrid search supports advanced syntax through traditional component."""
+        return True
+
+
+class SearchStrategyFactory:
+    """Factory for creating appropriate search strategies."""
+
+    @staticmethod
+    def create_strategy(search_mode: str, context: SearchContext, search_instance=None) -> SearchStrategy:
+        """Create appropriate search strategy based on mode and query content.
+
+        Only supports hybrid (default) and traditional modes.
+        """
+        # Check for advanced syntax that requires traditional search
+        is_simple = True
+        if search_instance is not None and hasattr(search_instance, 'is_simple_search'):
+            # Use proper parser-based detection when available
+            is_simple = search_instance.is_simple_search()
+            log.debug(f"Using search_instance.is_simple_search() for '{context.query}': {is_simple}")
+        else:
+            # Fallback to string-based detection if search instance not available
+            is_simple = not SearchStrategyFactory._has_advanced_syntax(context.query)
+            log.debug(f"Using fallback _has_advanced_syntax() for '{context.query}': {is_simple}")
+
+        if not is_simple:
+            log.debug(f"Using traditional search for advanced query: {context.query}")
+            return TraditionalSearchStrategy(context)
+
+        # Use the specified search mode - only hybrid or traditional
+        if search_mode == "traditional":
+            return TraditionalSearchStrategy(context)
+        else:  # hybrid (default) - includes any invalid mode
+            return HybridRRFSearchStrategy(context)
+
+    @staticmethod
+    def _has_advanced_syntax(query_text: str | None = None) -> bool:
+        """Fallback string-based check for advanced syntax (when proper parsing unavailable)."""
+        if not query_text:
+            return False
+
+        # Check for field operators (specific fields and generic patterns)
+        field_indicators = [
+            'field:', 'exact:', 'range:', 'title:', 'content:', 'keywords:',
+            'summary:', 'question:', 'answer:'
+        ]
+
+        # Check for boolean operators (including NOT at start)
+        boolean_indicators = [
+            ' AND ', ' OR ', ' NOT '
+        ]
+
+        # Check for NOT at the beginning of query
+        if query_text.startswith('NOT '):
+            return True
+
+        # Also check for quoted phrases
+        if '"' in query_text and query_text.count('"') >= 2:
+            return True
+
+        # Check all indicators
+        return (any(indicator in query_text for indicator in field_indicators) or
+                any(indicator in query_text for indicator in boolean_indicators))
+
+
+@dataclass
+class UnifiedSearch(SumoSearch):
+    """
+    Unified search class that handles all document types and search modes.
+    Supports wiki, questions, profiles, and forum documents with hybrid search by default.
+    """
+
+    # Core search parameters
+    query: str = ""
+    search_mode: str = "hybrid"  # "hybrid" or "traditional"
+    document_types: list[str] = field(default_factory=lambda: ["wiki", "questions"])
+    locales: list[str] = field(default_factory=lambda: ["en-US"])
+    primary_locale: str = "en-US"
+    product: Product | None = None
+
+    # Legacy compatibility
+    locale: str = field(default="", init=False)
+
+    # Cached computations
+    _field_boosts: dict = field(default_factory=dict, init=False)
+    _fields_cache: list = field(default_factory=list, init=False)
+    _semantic_fields_cache: list = field(default_factory=list, init=False)
+    _index_cache: str = field(default="", init=False)
+    _settings_cache: dict = field(default_factory=dict, init=False)
+
+    def __post_init__(self):
+        """Initialize search with proper defaults."""
+        if self.locale and self.locale not in self.locales:
+            self.locales = [self.locale]
+            self.primary_locale = self.locale
+        elif not self.primary_locale and self.locales:
+            self.primary_locale = self.locales[0]
+
+        self.document_types = [dt.lower().rstrip('s') for dt in self.document_types]
+
+        self._precompute_field_boosts()
+        self._precompute_fields()
+        self._precompute_index()
+        self._precompute_settings()
+
+    def get_index(self):
+        """Get pre-computed index string for document types."""
+        return self._index_cache
+
+    def get_fields(self):
+        """Get pre-computed search fields for all configured document types and locales."""
+        return self._fields_cache
+
+    def get_highlight_fields_options(self):
+        """Get highlight fields for all configured document types and locales."""
+        fields = []
+
+        for locale in self.locales:
+            if "wiki" in self.document_types:
+                fields.extend([
+                    (f"summary.{locale}", FVH_HIGHLIGHT_OPTIONS),
+                    (f"content.{locale}", FVH_HIGHLIGHT_OPTIONS),
+                ])
+
+            if "question" in self.document_types:
+                fields.extend([
+                    (f"question_content.{locale}", FVH_HIGHLIGHT_OPTIONS),
+                    (f"answer_content.{locale}", FVH_HIGHLIGHT_OPTIONS),
+                ])
+
+        return fields
+
+    def get_settings(self):
+        """Get pre-computed search settings based on document types."""
+        return self._settings_cache
+
+    def _create_search_context(self) -> SearchContext:
+        """Create SearchContext with cached values for strategies."""
+        context = SearchContext(
+            query=self.query,
+            locales=self.locales,
+            document_types=self.document_types,
+            primary_locale=self.primary_locale,
+            product=self.product,
+            parse_query=getattr(self, 'parse_query', True)
+        )
+
+        # Copy cached values to context
+        context.fields = self._fields_cache
+        context.semantic_fields = self._semantic_fields_cache
+        context.settings = self._settings_cache
+
+        return context
+
     def is_simple_search(self, token=None):
-        """Determine if the search query is simple (no advanced operators) or advanced.
+        """Determine if the search query is simple (uses ES simple_query_string) or advanced (needs Python parser).
 
-        Advanced searches are those containing:
-        - Field operators (field:value)
-        - Boolean operators (AND, OR, NOT)
-        - Range tokens (date ranges, numeric ranges)
-        - Exact tokens (quoted strings)
+        Simple searches are handled by Elasticsearch's simple_query_string parser and include:
+        - Basic terms and phrases
+        - Field operators like title:value, content:value (ES handles these)
+        - Quoted phrases like \"exact phrase\"
+        - Basic boolean operators (ES handles these)
 
-        Simple searches contain only basic terms and space-separated phrases.
+        Advanced searches require our Python parser and include:
+        - Complex field operators like field:title:value
+        - Exact matching like exact:category:value
+        - Range queries like range:date:gte:2021-01-01
+        - Complex nesting that ES simple_query_string can't handle
         """
         if token is None:
             if not self.query or not self.query.strip():
@@ -135,178 +451,419 @@ class QuestionSearch(SumoSearch):
                 # If parsing fails, it's definitely a simple search
                 return True
 
-        # Advanced operators and tokens indicate an advanced search
-        if isinstance(
-            token, FieldOperator | AndOperator | OrOperator | NotOperator | RangeToken | ExactToken
-        ):
+        # These require our Python parser (advanced)
+        if isinstance(token, FieldOperator | RangeToken | ExactToken):
             return False
 
-        # TermToken is always simple
+        # These can be handled by ES simple_query_string (simple)
         if isinstance(token, TermToken):
             return True
 
-        # SpaceOperator is simple only if all its arguments are simple
+        # Boolean operators: check if they're simple enough for ES
+        if isinstance(token, AndOperator | OrOperator | NotOperator):
+            # These are simple if all their arguments are simple
+            if hasattr(token, 'arguments'):
+                return all(self.is_simple_search(arg) for arg in token.arguments)
+            elif hasattr(token, 'argument'):
+                return self.is_simple_search(token.argument)
+
+        # SpaceOperator is simple if all its arguments are simple
         if isinstance(token, SpaceOperator):
             return all(self.is_simple_search(arg) for arg in token.arguments)
 
         # Any other token types are advanced by default
         return False
 
-    def get_highlight_fields_options(self):
-        fields = [
-            f"question_content.{self.locale}",
-            f"answer_content.{self.locale}",
-        ]
-        return [(field, FVH_HIGHLIGHT_OPTIONS) for field in fields]
+    def build_query(self) -> Query:
+        """Build the appropriate query using Strategy Pattern."""
+        if not self.query:
+            return DSLQ("match_all")
+
+        # Create context and get appropriate strategy
+        context = self._create_search_context()
+        strategy = SearchStrategyFactory.create_strategy(self.search_mode, context, self)
+
+        return strategy.build_query()
+
+    def _precompute_field_boosts(self):
+        """Pre-compute all field boosts to avoid repeated calculations."""
+        field_base_boosts = {
+            "title": 6.0,
+            "keywords": 8.0,
+            "summary": 4.0,
+            "content": 2.0,
+            "question_title": 2.0,
+            "question_content": 1.0,
+            "answer_content": 1.0
+        }
+
+        for locale in self.locales:
+            locale_multiplier = 1.5 if locale == self.primary_locale else 1.0
+            for field_name, base_boost in field_base_boosts.items():
+                key = f"{field_name}:{locale}"
+                self._field_boosts[key] = base_boost * locale_multiplier
+
+    def _precompute_fields(self):
+        """Pre-compute field lists to avoid repeated calculations."""
+        fields = []
+        for locale in self.locales:
+            if "wiki" in self.document_types:
+                fields.extend([
+                    f"keywords.{locale}^{self._get_field_boost('keywords', locale)}",
+                    f"title.{locale}^{self._get_field_boost('title', locale)}",
+                    f"summary.{locale}^{self._get_field_boost('summary', locale)}",
+                    f"content.{locale}^{self._get_field_boost('content', locale)}",
+                ])
+
+            if "question" in self.document_types:
+                fields.extend([
+                    f"question_title.{locale}^{self._get_field_boost('question_title', locale)}",
+                    f"question_content.{locale}^{self._get_field_boost('question_content', locale)}",
+                    f"answer_content.{locale}^{self._get_field_boost('answer_content', locale)}",
+                ])
+
+        if "profile" in self.document_types:
+            fields.extend(["username", "name"])
+
+        if "forum" in self.document_types:
+            fields.extend(["thread_title", "content"])
+
+        self._fields_cache = fields
+
+        semantic_fields = []
+        if "wiki" in self.document_types:
+            semantic_fields.extend(["title", "content", "summary"])
+
+        if "question" in self.document_types:
+            semantic_fields.extend(["question_title", "question_content", "answer_content"])
+
+        self._semantic_fields_cache = semantic_fields
+
+    def _precompute_index(self):
+        """Pre-compute index string to avoid repeated calculations."""
+        indices = []
+        if "wiki" in self.document_types:
+            indices.append(WikiDocument.Index.read_alias)
+        if "question" in self.document_types:
+            indices.append(QuestionDocument.Index.read_alias)
+        if "profile" in self.document_types:
+            indices.append(ProfileDocument.Index.read_alias)
+        if "forum" in self.document_types:
+            indices.append(ForumDocument.Index.read_alias)
+
+        self._index_cache = ",".join(indices) if len(indices) > 1 else indices[0]
+
+    def _precompute_settings(self):
+        """Pre-compute settings dict to avoid repeated calculations."""
+        settings_dict = {"field_mappings": {}, "range_allowed": []}
+
+        if "wiki" in self.document_types:
+            settings_dict["field_mappings"].update({
+                "title": [f"title.{locale}" for locale in self.locales],
+                "content": [f"content.{locale}" for locale in self.locales],
+            })
+            settings_dict["exact_mappings"] = {"category": CATEGORY_EXACT_MAPPING}
+            settings_dict["range_allowed"].extend(["updated"])
+
+        if "question" in self.document_types:
+            settings_dict["field_mappings"].update({
+                "question": [f"question_content.{locale}" for locale in self.locales],
+                "answer": [f"answer_content.{locale}" for locale in self.locales],
+            })
+            settings_dict["range_allowed"].extend([
+                "question_created", "question_updated", "question_taken_until", "question_num_votes"
+            ])
+
+        if "forum" in self.document_types:
+            settings_dict["field_mappings"]["title"] = "thread_title"
+            settings_dict["range_allowed"].extend(["thread_created", "created", "updated"])
+
+        self._settings_cache = settings_dict
+
+    def _get_field_boost(self, field: str, locale: str) -> float:
+        """Get pre-computed boost value for fields."""
+        key = f"{field}:{locale}"
+        return self._field_boosts.get(key, 1.0)  # Default boost if not found
 
     def get_filter(self):
-        filters = [
-            # restrict to the question index
-            DSLQ("term", _index=self.get_index()),
-            # ensure that there is a title for the passed locale
-            DSLQ("exists", field=f"question_title.{self.locale}"),
-            # only return questions created within QUESTION_DAYS_DELTA
-            DSLQ(
-                "range",
-                question_created={
+        """Get complete filter query including the search query."""
+        filters = self._build_filters()
+        return DSLQ("bool", filter=filters, must=self.build_query())
+
+    def _build_filters(self):
+        """Build filters for all configured document types."""
+        doc_type_filters = []
+
+        # Build locale exists queries once and reuse
+        locale_exists_queries = {}
+        if self.locales:
+            locale_exists_queries["wiki"] = DSLQ("bool", should=[
+                DSLQ("exists", field=f"title.{locale}") for locale in self.locales
+            ], minimum_should_match=1)
+            locale_exists_queries["question"] = DSLQ("bool", should=[
+                DSLQ("exists", field=f"question_title.{locale}") for locale in self.locales
+            ], minimum_should_match=1)
+
+        if "wiki" in self.document_types:
+            wiki_filters = [DSLQ("term", _index=WikiDocument.Index.read_alias)]
+            if "wiki" in locale_exists_queries:
+                wiki_filters.append(locale_exists_queries["wiki"])
+            if self.product:
+                wiki_filters.append(DSLQ("term", product_ids=self.product.id))
+            doc_type_filters.append(DSLQ("bool", filter=wiki_filters))
+
+        if "question" in self.document_types:
+            question_filters = [
+                DSLQ("term", _index=QuestionDocument.Index.read_alias),
+                DSLQ("range", question_created={
                     "gte": datetime.now(UTC) - timedelta(days=QUESTION_DAYS_DELTA)
-                },
-            ),
-        ]
+                }),
+                DSLQ("bool", must_not=DSLQ("exists", field="updated")),
+            ]
+            if "question" in locale_exists_queries:
+                question_filters.append(locale_exists_queries["question"])
+            if self.product:
+                question_filters.append(DSLQ("term", question_product_id=self.product.id))
+            doc_type_filters.append(DSLQ("bool", filter=question_filters))
 
-        if self.is_simple_search():
-            filters.append(DSLQ("term", question_is_archived=False))
+        if "profile" in self.document_types:
+            doc_type_filters.append(DSLQ("term", _index=ProfileDocument.Index.read_alias))
 
-        if self.product:
-            filters.append(DSLQ("term", question_product_id=self.product.id))
-        return DSLQ(
-            "bool",
-            filter=filters,
-            # exclude AnswerDocuments from the search:
-            must_not=DSLQ("exists", field="updated"),
-            must=self.build_query(),
-        )
+        if "forum" in self.document_types:
+            doc_type_filters.append(DSLQ("term", _index=ForumDocument.Index.read_alias))
+
+        return [DSLQ("bool", should=doc_type_filters, minimum_should_match=1)] if len(doc_type_filters) > 1 else doc_type_filters
+
+    def run(self, key=None) -> Self:
+        """Execute search with hybrid search handling."""
+        if key is None:
+            # Use stricter page size if strict relevance is enabled
+            page_size = 10 if settings.SEARCH_STRICT_RELEVANCE else settings.SEARCH_RESULTS_PER_PAGE
+            key = slice(0, page_size)
+
+        query = self.build_query()
+
+        if isinstance(query, RRFQuery):
+            return self._run_rrf_search(query, key)
+
+        return super().run(key)  # type: ignore
+
+    def _run_rrf_search(self, query: RRFQuery, key) -> Self:
+        """Execute RRF search using native Elasticsearch client."""
+        client = es_client()
+        rrf_dict = query.to_dict()
+        filters = self._build_filters()
+
+        # Dynamically adjust RRF window size based on requested page
+        # The window must be large enough to include all requested results
+        if isinstance(key, slice):
+            requested_end = key.stop or settings.SEARCH_RESULTS_PER_PAGE
+        else:
+            requested_end = key + 1
+
+        # Set window size to accommodate requested results, capped at configured limit
+        max_window = settings.SEARCH_RRF_WINDOW_SIZE if settings.SEARCH_STRICT_RELEVANCE else settings.RRF_WINDOW_MAX_SIZE
+
+        # For strict relevance, we always need the full window to filter properly
+        if settings.SEARCH_STRICT_RELEVANCE and settings.SEARCH_MIN_SCORE_THRESHOLD > 0:
+            needed_window_size = max_window
+        else:
+            needed_window_size = min(requested_end, max_window)
+
+        rrf_dict["retriever"]["rrf"]["rank_window_size"] = needed_window_size
+
+        if filters:
+            filter_dicts = []
+            for f in filters:
+                if hasattr(f, 'to_dict'):
+                    filter_dicts.append(f.to_dict())
+                else:
+                    filter_dicts.append(f)
+
+            for retriever in rrf_dict["retriever"]["rrf"]["retrievers"]:
+                if "standard" in retriever and "query" in retriever["standard"]:
+                    original_query = retriever["standard"]["query"]
+                    if hasattr(original_query, 'to_dict'):
+                        original_query = original_query.to_dict()
+
+                    retriever["standard"]["query"] = {
+                        "bool": {
+                            "filter": filter_dicts,
+                            "must": original_query
+                        }
+                    }
+
+        body = rrf_dict.copy()
+
+        highlight_fields = {}
+        for field_name, options in self.get_highlight_fields_options():
+            highlight_fields[field_name] = options
+        if highlight_fields:
+            body["highlight"] = {"fields": highlight_fields}
+
+        if isinstance(key, slice):
+            body["from"] = key.start or 0
+            body["size"] = key.stop - (key.start or 0)
+        else:
+            body["from"] = key
+            body["size"] = 1
+
+        try:
+            result = client.search(index=self.get_index(), body=body, **settings.ES_SEARCH_PARAMS)
+        except RequestError as e:
+            if hasattr(self, 'parse_query') and self.parse_query:  # type: ignore
+                self.parse_query = False
+                return self.run(key)
+            raise e
+
+        self.hits = result["hits"]["hits"]
+        total = result["hits"]["total"]
+        raw_total = total["value"] if isinstance(total, dict) else total
+
+        # Cap total at the configured window size
+        max_window = settings.SEARCH_RRF_WINDOW_SIZE if settings.SEARCH_STRICT_RELEVANCE else settings.RRF_WINDOW_MAX_SIZE
+
+        # Track if results were capped for display purposes
+        self.results_capped = raw_total > max_window
+
+        # If strict relevance is enabled, we need to properly handle score filtering
+        if settings.SEARCH_STRICT_RELEVANCE and settings.SEARCH_MIN_SCORE_THRESHOLD > 0:
+            # For RRF, we need to get ALL results up to window size to count properly
+            # Then filter and paginate from the filtered set
+
+            # First, get all results up to window size if we haven't already
+            if isinstance(key, slice) and (key.stop - (key.start or 0)) < max_window:
+                # We're paginating - need to get all results first to filter properly
+                full_body = body.copy()
+                full_body["from"] = 0
+                full_body["size"] = max_window
+
+                # Get all results up to window size
+                full_result = client.search(index=self.get_index(), body=full_body, **settings.ES_SEARCH_PARAMS)
+                all_hits = full_result["hits"]["hits"]
+
+                # Filter all hits by score threshold
+                filtered_all_hits = [hit for hit in all_hits if hit.get('_score', 0) >= settings.SEARCH_MIN_SCORE_THRESHOLD]
+
+                # Update total to reflect actual filtered count
+                self.total = len(filtered_all_hits)
+
+                # Now slice the filtered results for the requested page
+                if isinstance(key, slice):
+                    start = key.start or 0
+                    stop = key.stop or settings.SEARCH_RESULTS_PER_PAGE
+                    self.hits = filtered_all_hits[start:stop]
+                else:
+                    self.hits = filtered_all_hits[key:key+1] if key < len(filtered_all_hits) else []
+            else:
+                # Not paginating or already have full window - just filter current hits
+                filtered_hits = [hit for hit in self.hits if hit.get('_score', 0) >= settings.SEARCH_MIN_SCORE_THRESHOLD]
+                self.hits = filtered_hits
+                self.total = min(raw_total, max_window)
+        else:
+            # No strict relevance - use standard approach
+            self.total = min(raw_total, max_window)
+
+        self.results = [self.make_result(self._convert_hit_to_attrdict(hit)) for hit in self.hits]
+        self.last_key = key
+
+        return self
+
+    def _convert_hit_to_attrdict(self, hit):
+        """Convert ES hit dict to AttrDict-like object for compatibility."""
+        attr_hit = AttrDict(hit.get("_source", {}))
+        attr_hit.meta = AttrDict({
+            "id": hit["_id"],
+            "index": hit["_index"],
+            "score": hit["_score"],
+            "highlight": AttrDict(hit["highlight"]) if "highlight" in hit else None
+        })
+        return attr_hit
 
     def make_result(self, hit):
-        # generate a summary for search:
+        """Route result creation to appropriate handler based on document type."""
+        index = hit.meta.index
+
+        if same_base_index(index, WikiDocument.Index.read_alias):
+            return self._make_wiki_result(hit)
+        elif same_base_index(index, QuestionDocument.Index.read_alias):
+            return self._make_question_result(hit)
+        elif same_base_index(index, ProfileDocument.Index.read_alias):
+            return self._make_profile_result(hit)
+        elif same_base_index(index, ForumDocument.Index.read_alias):
+            return self._make_forum_result(hit)
+        else:
+            return {"type": "unknown", "title": "Unknown result"}
+
+    def _get_localized_field(self, hit, field_name, locale):
+        """Extract localized field value from hit."""
+        field = getattr(hit, field_name, None)
+        if field and hasattr(field, locale):
+            return getattr(field, locale, "")
+        return ""
+
+    def _get_summary(self, hit, content_field, detected_locale):
+        """Get summary from highlight or content, stripped of HTML."""
+        summary = first_highlight(hit)
+        if not summary and hasattr(hit, content_field):
+            content = self._get_localized_field(hit, content_field, detected_locale)
+            if content:
+                summary = content[:SNIPPET_LENGTH]
+        return strip_html(summary) if summary else ""
+
+    def _make_wiki_result(self, hit):
+        """Create result for wiki document."""
+        detected_locale = self._detect_locale(hit, "title")
+
+        # Try summary field first, then content
         summary = first_highlight(hit)
         if not summary:
-            summary = hit.question_content[self.locale][:SNIPPET_LENGTH]
-        summary = strip_html(summary)
+            summary = self._get_localized_field(hit, "summary", detected_locale)
+        if not summary:
+            summary = self._get_summary(hit, "content", detected_locale)
 
-        # for questions that have no answers, set to None:
+        title = self._get_localized_field(hit, "title", detected_locale)
+        slug = self._get_localized_field(hit, "slug", detected_locale)
+
+        return {
+            "type": "document",
+            "url": reverse("wiki.document", args=[slug], locale=detected_locale),
+            "score": hit.meta.score,
+            "title": title,
+            "search_summary": summary,
+            "id": hit.meta.id,
+            "result_locale": detected_locale,
+            "is_fallback_locale": detected_locale != self.primary_locale,
+        }
+
+    def _make_question_result(self, hit):
+        """Create result for question document."""
+        detected_locale = self._detect_locale(hit, "question_title")
+        summary = self._get_summary(hit, "question_content", detected_locale)
+
+        # Count answers if available
         answer_content = getattr(hit, "answer_content", None)
+        num_answers = 0
+        if answer_content and hasattr(answer_content, detected_locale):
+            locale_answers = getattr(answer_content, detected_locale, [])
+            num_answers = len(locale_answers) if locale_answers else 0
 
         return {
             "type": "question",
             "url": reverse("questions.details", kwargs={"question_id": hit.question_id}),
             "score": hit.meta.score,
-            "title": hit.question_title[self.locale],
+            "title": self._get_localized_field(hit, "question_title", detected_locale),
             "search_summary": summary,
             "last_updated": datetime.fromisoformat(hit.question_updated),
             "is_solved": hit.question_has_solution,
-            "num_answers": len(answer_content[self.locale]) if answer_content else 0,
+            "num_answers": num_answers,
             "num_votes": hit.question_num_votes,
+            "result_locale": detected_locale,
+            "is_fallback_locale": detected_locale != self.primary_locale,
         }
 
-
-@dataclass
-class WikiSearch(SumoSearch):
-    """Search over Knowledge Base articles."""
-
-    locale: str = "en-US"
-    product: Product | None = None
-
-    def get_index(self):
-        return WikiDocument.Index.read_alias
-
-    def get_fields(self):
-        return [
-            # ^x boosts the score from that field by x amount
-            f"keywords.{self.locale}^8",
-            f"title.{self.locale}^6",
-            f"summary.{self.locale}^4",
-            f"content.{self.locale}^2",
-        ]
-
-    def get_settings(self):
-        return {
-            "field_mappings": {
-                "title": f"title.{self.locale}",
-                "content": f"content.{self.locale}",
-            },
-            "exact_mappings": {
-                "category": CATEGORY_EXACT_MAPPING,
-            },
-            "range_allowed": [
-                "updated",
-            ],
-        }
-
-    def get_highlight_fields_options(self):
-        fields = [
-            f"summary.{self.locale}",
-            f"content.{self.locale}",
-        ]
-        return [(field, FVH_HIGHLIGHT_OPTIONS) for field in fields]
-
-    def get_filter(self):
-        # Add default filters:
-        filters = [
-            # limit scope to the Wiki index
-            DSLQ("term", _index=self.get_index()),
-            DSLQ("exists", field=f"title.{self.locale}"),
-        ]
-        if self.product:
-            filters.append(DSLQ("term", product_ids=self.product.id))
-        return DSLQ("bool", filter=filters, must=self.build_query())
-
-    def make_result(self, hit):
-        # generate a summary for search:
-        summary = first_highlight(hit)
-        if not summary and hasattr(hit, "summary"):
-            summary = getattr(hit.summary, self.locale, None)
-        if not summary:
-            summary = hit.content[self.locale][:SNIPPET_LENGTH]
-        summary = strip_html(summary)
-
-        return {
-            "type": "document",
-            "url": reverse("wiki.document", args=[hit.slug[self.locale]], locale=self.locale),
-            "score": hit.meta.score,
-            "title": hit.title[self.locale],
-            "search_summary": summary,
-            "id": hit.meta.id,
-        }
-
-
-@dataclass
-class ProfileSearch(SumoSearch):
-    """Search over User Profiles."""
-
-    group_ids: list[int] = dfield(default_factory=list)
-
-    def get_index(self):
-        return ProfileDocument.Index.read_alias
-
-    def get_fields(self):
-        return ["username", "name"]
-
-    def get_highlight_fields_options(self):
-        return []
-
-    def get_filter(self):
-        return DSLQ(
-            "boosting",
-            positive=self.build_query(),
-            negative=DSLQ(
-                "bool",
-                must_not=DSLQ("terms", group_ids=self.group_ids),
-            ),
-            negative_boost=0.5,
-        )
-
-    def make_result(self, hit):
+    def _make_profile_result(self, hit):
+        """Create result for profile document."""
         return {
             "type": "user",
             "avatar": getattr(hit, "avatar", None),
@@ -315,46 +872,8 @@ class ProfileSearch(SumoSearch):
             "user_id": hit.meta.id,
         }
 
-
-@dataclass
-class ForumSearch(SumoSearch):
-    """Search over User Profiles."""
-
-    thread_forum_id: int | None = None
-
-    def get_index(self):
-        return ForumDocument.Index.read_alias
-
-    def get_fields(self):
-        return ["thread_title", "content"]
-
-    def get_settings(self):
-        return {
-            "field_mappings": {
-                "title": "thread_title",
-            },
-            "range_allowed": [
-                "thread_created",
-                "created",
-                "updated",
-            ],
-        }
-
-    def get_highlight_fields_options(self):
-        return []
-
-    def get_filter(self):
-        # Add default filters:
-        filters = [
-            # limit scope to the Forum index
-            DSLQ("term", _index=self.get_index())
-        ]
-
-        if self.thread_forum_id:
-            filters.append(DSLQ("term", thread_forum_id=self.thread_forum_id))
-        return DSLQ("bool", filter=filters, must=self.build_query())
-
-    def make_result(self, hit):
+    def _make_forum_result(self, hit):
+        """Create result for forum document."""
         return {
             "type": "thread",
             "title": hit.thread_title,
@@ -367,61 +886,115 @@ class ForumSearch(SumoSearch):
             + f"#post-{hit.meta.id}",
         }
 
+    def _detect_locale(self, hit, title_field):
+        """Detect which locale this result is in."""
+        title_attr = getattr(hit, title_field, None)
+        if title_attr:
+            for locale in self.locales:
+                if hasattr(title_attr, locale) and getattr(title_attr, locale):
+                    return locale
+        return self.locales[0]
 
-@dataclass
-class CompoundSearch(SumoSearch):
-    """Combine a number of SumoSearch classes into one search."""
 
-    _children: list[SumoSearch] = dfield(default_factory=list, init=False)
-    _parse_query: bool = True
+# Factory functions for creating searches
+def create_search(query="", document_types=None, search_mode="hybrid", locales=None,
+                 primary_locale="en-US", product=None, **kwargs):
+    """
+    Factory function to create search instances.
 
-    @property  # type: ignore
-    def parse_query(self):
-        return self._parse_query
+    Args:
+        query: Search query string
+        document_types: List of document types to search ["wiki", "questions", "profiles", "forums"]
+        search_mode: "hybrid" or "traditional"
+        locales: List of locales to search
+        primary_locale: Primary locale for boosting
+        product: Product to filter by
+        **kwargs: Additional parameters (for backward compatibility)
+    """
+    # Handle legacy locale parameter
+    if 'locale' in kwargs:
+        locales = locales or [kwargs['locale']]
+        primary_locale = kwargs['locale']
 
-    @parse_query.setter
-    def parse_query(self, value):
-        """Set value of parse_query across all children."""
-        self._parse_query = value
-        for child in self._children:
-            child.parse_query = value
+    # Set defaults
+    if document_types is None:
+        document_types = ["wiki", "questions"]
+    if locales is None:
+        locales = [primary_locale]
 
-    def add(self, child):
-        """Add a SumoSearch instance to search over. Chainable."""
-        self._children.append(child)
+    return UnifiedSearch(
+        query=query,
+        search_mode=search_mode,
+        document_types=document_types,
+        locales=locales,
+        primary_locale=primary_locale,
+        product=product,
+    )
 
-    def _from_children(self, name):
-        """
-        Get an attribute from all children.
 
-        Will flatten lists.
-        """
-        value = []
+def _create_single_type_search(doc_type, query="", search_mode="hybrid", locales=None,
+                               primary_locale="en-US", locale="", product=None, **kwargs):
+    """Helper for creating single document type searches."""
+    if locale and not locales:
+        locales = [locale]
+        primary_locale = locale
+    return create_search(
+        query=query,
+        document_types=[doc_type],
+        search_mode=search_mode,
+        locales=locales or [primary_locale],
+        primary_locale=primary_locale,
+        product=product,
+        **kwargs
+    )
 
-        for child in self._children:
-            attr = getattr(child, name)()
-            if isinstance(attr, list):
-                # if the attribute's value is itself a list, unpack it
-                value = [*value, *attr]
-            else:
-                value.append(attr)
-        return value
 
-    def get_index(self):
-        return ",".join(self._from_children("get_index"))
+# Backward compatibility functions
+def WikiSearch(query="", search_mode="hybrid", locales=None, primary_locale="en-US",
+               locale="", product=None, **kwargs):
+    """Backward compatibility: Wiki search."""
+    return _create_single_type_search("wiki", query, search_mode, locales,
+                                     primary_locale, locale, product, **kwargs)
 
-    def get_fields(self):
-        return self._from_children("get_fields")
 
-    def get_highlight_fields_options(self):
-        return self._from_children("get_highlight_fields_options")
+def QuestionSearch(query="", search_mode="hybrid", locales=None, primary_locale="en-US",
+                   locale="", product=None, **kwargs):
+    """Backward compatibility: Question search."""
+    return _create_single_type_search("questions", query, search_mode, locales,
+                                     primary_locale, locale, product, **kwargs)
 
-    def get_filter(self):
-        # `should` with `minimum_should_match=1` acts like an OR filter
-        return DSLQ("bool", should=self._from_children("get_filter"), minimum_should_match=1)
 
-    def make_result(self, hit):
-        index = hit.meta.index
-        for child in self._children:
-            if same_base_index(index, child.get_index()):
-                return child.make_result(hit)
+def ProfileSearch(query="", group_ids=None, **kwargs):
+    """Backward compatibility: Profile search."""
+    search = create_search(query=query, document_types=["profiles"], search_mode="traditional")
+    if group_ids:
+        search.group_ids = group_ids
+    return search
+
+
+def ForumSearch(query="", thread_forum_id=None, **kwargs):
+    """Backward compatibility: Forum search."""
+    search = create_search(query=query, document_types=["forums"], search_mode="traditional")
+    if thread_forum_id:
+        search.thread_forum_id = thread_forum_id
+    return search
+
+
+def CompoundSearch(query="", search_mode="hybrid", locales=None, primary_locale="en-US",
+                   locale="", product=None, **kwargs):
+    """Backward compatibility: Compound search."""
+    if locale and not locales:
+        locales = [locale]
+        primary_locale = locale
+    return create_search(
+        query=query,
+        document_types=["wiki", "questions"],
+        search_mode=search_mode,
+        locales=locales or [primary_locale],
+        primary_locale=primary_locale,
+        product=product,
+        **kwargs
+    )
+
+
+HybridSearch = CompoundSearch

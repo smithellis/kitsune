@@ -761,8 +761,21 @@ ES_INDEX_PREFIX = config("ES_INDEX_PREFIX", default="sumo")
 # Keep indexes up to date as objects are made/deleted.
 ES_LIVE_INDEXING = config("ES_LIVE_INDEXING", default=True, cast=bool)
 
+# Semantic Search Configuration
+USE_SEMANTIC_SEARCH = config("USE_SEMANTIC_SEARCH", default=True, cast=bool)
+
 SEARCH_MAX_RESULTS = 1000
 SEARCH_RESULTS_PER_PAGE = 10
+
+# RRF (Reciprocal Rank Fusion) configuration for hybrid search
+RRF_WINDOW_MAX_SIZE = 500  # Maximum window size to prevent performance issues
+RRF_RANK_CONSTANT = 20  # Rank constant for RRF algorithm
+
+# Stricter relevance settings
+SEARCH_STRICT_RELEVANCE = True  # Enable stricter relevance scoring
+SEARCH_RRF_WINDOW_SIZE = 50  # Actual window size for RRF (only top 50 results are relevant)
+SEARCH_RRF_RANK_CONSTANT = 60  # Higher value favors top-ranked results
+SEARCH_MIN_SCORE_THRESHOLD = 0.01  # Minimum score threshold for results (RRF scores are typically low)
 
 # Search default settings
 SEARCH_DEFAULT_CATEGORIES = (
@@ -1382,3 +1395,17 @@ SHELL_PLUS_DONT_LOAD = ["silk"]
 # AI Translation
 AI_ENABLED_LOCALES = config("AI_ENABLED_LOCALES", default="", cast=Csv())
 HYBRID_ENABLED_LOCALES = config("HYBRID_ENABLED_LOCALES", default="", cast=Csv())
+
+# RRF Settings for hybrid search
+RRF_WINDOW_MAX_SIZE = config("RRF_WINDOW_MAX_SIZE", default=500, cast=int)
+RRF_RANK_CONSTANT = config("RRF_RANK_CONSTANT", default=20, cast=int)
+
+# Stricter relevance settings (from environment)
+SEARCH_STRICT_RELEVANCE = config("SEARCH_STRICT_RELEVANCE", default=True, cast=bool)
+SEARCH_RRF_WINDOW_SIZE = config("SEARCH_RRF_WINDOW_SIZE", default=50, cast=int)
+SEARCH_RRF_RANK_CONSTANT = config("SEARCH_RRF_RANK_CONSTANT", default=60, cast=int)
+SEARCH_MIN_SCORE_THRESHOLD = config("SEARCH_MIN_SCORE_THRESHOLD", default=0.01, cast=float)
+# Minimum score threshold for RRF hybrid search results - tune based on production data
+# RRF scores range from ~0.048 (rank 1) to ~0.002 (rank 500) with k=20
+# Setting to 0.01 filters only results ranked worse than ~100
+RRF_HYBRID_MIN_SCORE = config("RRF_HYBRID_MIN_SCORE", default=0.01, cast=float)

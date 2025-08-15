@@ -85,7 +85,6 @@ ES_LOCALE_ANALYZERS = {
         "filter": [
             "lowercase",
             {"type": "stop", "stopwords": "_danish_"},
-            {"type": "stop", "stopwords": "_danish_"},
         ]
     },
     "de": {
