@@ -1,7 +1,7 @@
 from functools import partial
 
 from django.conf import settings
-from elasticsearch.dsl import Keyword, Text
+from elasticsearch.dsl import Keyword, Text, field
 from elasticsearch.dsl import Object as DSLObject
 
 from kitsune.search.es_utils import es_analyzer_for_locale
@@ -38,9 +38,32 @@ def construct_locale_field(field, locales, **params):
     return DSLObject(properties=inner_fields)
 
 
+class SemanticText(field.Field):
+    """Custom field type for semantic_text fields in Elasticsearch."""
+    name = "semantic_text"
+
+    def __init__(self, **params):
+        super().__init__(**params)
+
+
+def _get_semantic_fields(locales, **params):
+    """Construct the sub-fields of locale aware semantic multi-field"""
+    data = {}
+    for locale in locales:
+        data[locale] = SemanticText(**params)
+    return data
+
+
+def construct_locale_semantic_field(locales, **params):
+    """Construct a locale aware semantic field object."""
+    inner_fields = _get_semantic_fields(locales=locales, **params)
+    return DSLObject(properties=inner_fields)
+
+
 SumoTextField = partial(construct_locale_field, field=Text)
 SumoKeywordField = partial(construct_locale_field, field=Keyword)
 # This is an object in the form of
 # {'en-US': Text(analyzer_for_the_specific_locale)}
 SumoLocaleAwareTextField = partial(SumoTextField, locales=SUPPORTED_LANGUAGES)
 SumoLocaleAwareKeywordField = partial(SumoKeywordField, locales=SUPPORTED_LANGUAGES)
+SumoLocaleAwareSemanticField = partial(construct_locale_semantic_field, locales=SUPPORTED_LANGUAGES)

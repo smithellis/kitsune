@@ -6,7 +6,11 @@ from kitsune.questions.models import Answer, Question
 from kitsune.search import config
 from kitsune.search.base import SumoDocument
 from kitsune.search.es_utils import es_client
-from kitsune.search.fields import SumoLocaleAwareKeywordField, SumoLocaleAwareTextField
+from kitsune.search.fields import (
+    SumoLocaleAwareKeywordField,
+    SumoLocaleAwareSemanticField,
+    SumoLocaleAwareTextField,
+)
 from kitsune.users.models import Profile
 from kitsune.wiki import models as wiki_models
 from kitsune.wiki.config import (
@@ -36,6 +40,11 @@ class WikiDocument(SumoDocument):
     keywords = SumoLocaleAwareTextField()
     slug = SumoLocaleAwareKeywordField(store=True)
     doc_id = SumoLocaleAwareKeywordField(store=True)
+
+    # Semantic fields for hybrid search
+    title_semantic = SumoLocaleAwareSemanticField()
+    content_semantic = SumoLocaleAwareSemanticField()
+    summary_semantic = SumoLocaleAwareSemanticField()
 
     class Index:
         pass
@@ -86,6 +95,15 @@ class WikiDocument(SumoDocument):
 
     def prepare_display_order(self, instance):
         return instance.original.display_order
+
+    def prepare_title_semantic(self, instance):
+        return self.prepare_title(instance)
+
+    def prepare_content_semantic(self, instance):
+        return self.prepare_content(instance)
+
+    def prepare_summary_semantic(self, instance):
+        return self.prepare_summary(instance)
 
     @classmethod
     def get_model(cls):
@@ -144,6 +162,11 @@ class QuestionDocument(SumoDocument):
 
     locale = field.Keyword()
 
+    # Semantic fields for hybrid search
+    question_title_semantic = SumoLocaleAwareSemanticField()
+    question_content_semantic = SumoLocaleAwareSemanticField()
+    answer_content_semantic = SumoLocaleAwareSemanticField()
+
     class Index:
         pass
 
@@ -180,6 +203,15 @@ class QuestionDocument(SumoDocument):
                 else instance.answers.filter(is_spam=False)
             )
         ]
+
+    def prepare_question_title_semantic(self, instance):
+        return instance.title
+
+    def prepare_question_content_semantic(self, instance):
+        return instance.content
+
+    def prepare_answer_content_semantic(self, instance):
+        return self.prepare_answer_content(instance)
 
     def get_field_value(self, field, *args):
         if field.startswith("question_"):

@@ -1,3 +1,4 @@
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from dataclasses import field as dfield
@@ -58,8 +59,12 @@ class SumoDocument(DSLDocument):
         cls.Index.base_name = f"{settings.ES_INDEX_PREFIX}_{name.lower()}"
         cls.Index.read_alias = f"{cls.Index.base_name}_read"
         cls.Index.write_alias = f"{cls.Index.base_name}_write"
-        # Bump the refresh interval to 1 minute
-        cls.Index.settings = {"refresh_interval": DEFAULT_ES_REFRESH_INTERVAL}
+        # Index settings for semantic fields support
+        cls.Index.settings = {
+            "refresh_interval": DEFAULT_ES_REFRESH_INTERVAL,
+            "mapping.nested_fields.limit": 1000,  # Increased from default 50
+            "mapping.total_fields.limit": 2000,   # Increased from default 1000
+        }
 
         # this is the attribute elastic-dsl actually uses to determine which index
         # to query. we override the .search() method to get that to use the read
@@ -341,6 +346,22 @@ class SumoSearch(SumoSearchInterface):
             return self.results[0]
         return self.results
 
+    def is_advanced_query(self):
+        """Detect if query contains advanced search syntax."""
+        if not self.query or not self.query.strip():
+            return False
+
+        # Quick checks for obvious advanced syntax
+        if ':' in self.query or '"' in self.query:
+            return True
+
+        # Check for boolean operators using word boundaries to avoid false positives
+        boolean_pattern = r'\b(AND|OR|NOT)\b'
+        if re.search(boolean_pattern, self.query):
+            return True
+
+        return False
+
     def build_query(self):
         """Build a query to search over a specific set of documents."""
         parsed = None
@@ -365,34 +386,83 @@ class SumoSearch(SumoSearchInterface):
         """Perform search, placing the results in `self.results`, and the total
         number of results (across all pages) in `self.total`. Chainable."""
 
-        search = DSLSearch(using=es_client(), index=self.get_index()).params(
-            **settings.ES_SEARCH_PARAMS
-        )
+        # Check if the filter is an RRF query
+        filter_query = self.get_filter()
 
-        # add the search class' filter
-        search = search.query(self.get_filter())
-        # add highlights for the search class' highlight_fields
-        for highlight_field, options in self.get_highlight_fields_options():
-            search = search.highlight(highlight_field, **options)
-        # slice search
-        search = search[key]
+        # Import RRFQuery here to avoid circular import (search.py imports base.py)
+        from kitsune.search.search import RRFQuery
 
-        # perform search
-        try:
-            result = search.execute()
-        except RequestError as e:
-            if self.parse_query:
-                # try search again, but without parsing any advanced syntax
-                self.parse_query = False
-                return self.run(key)
-            raise e
+        if isinstance(filter_query, RRFQuery):
+            # Handle RRF queries using direct ES client
+            client = es_client()
 
-        self.hits = result.hits
+            # Calculate from/size from key
+            if isinstance(key, slice):
+                from_offset = key.start or 0
+                size = (key.stop or settings.SEARCH_RESULTS_PER_PAGE) - from_offset
+            else:
+                from_offset = key
+                size = 1
+
+            # Build the search body with RRF
+            search_body = filter_query.to_dict()
+            search_body["from"] = from_offset
+            search_body["size"] = size
+
+            # Perform the search
+            try:
+                result = client.search(
+                    index=self.get_index(),
+                    body=search_body,
+                    **settings.ES_SEARCH_PARAMS
+                )
+            except RequestError as e:
+                if self.parse_query:
+                    # try search again, but without parsing any advanced syntax
+                    self.parse_query = False
+                    return self.run(key)
+                raise e
+
+            # Convert results to AttrDict format for compatibility
+            self.hits = [AttrDict(hit["_source"]) for hit in result["hits"]["hits"]]
+            for i, hit in enumerate(self.hits):
+                hit.meta = AttrDict({
+                    "score": result["hits"]["hits"][i]["_score"],
+                    "index": result["hits"]["hits"][i]["_index"],
+                    "id": result["hits"]["hits"][i]["_id"]
+                })
+
+            self.total = result["hits"]["total"]["value"]
+            self.results = [self.make_result(hit) for hit in self.hits]
+        else:
+            # Original non-RRF path
+            search = DSLSearch(using=es_client(), index=self.get_index()).params(
+                **settings.ES_SEARCH_PARAMS
+            )
+
+            # add the search class' filter
+            search = search.query(filter_query)
+            # add highlights for the search class' highlight_fields
+            for highlight_field, options in self.get_highlight_fields_options():
+                search = search.highlight(highlight_field, **options)
+            # slice search
+            search = search[key]
+
+            # perform search
+            try:
+                result = search.execute()
+            except RequestError as e:
+                if self.parse_query:
+                    # try search again, but without parsing any advanced syntax
+                    self.parse_query = False
+                    return self.run(key)
+                raise e
+
+            self.hits = result.hits
+            self.total = self.hits.total.value  # type: ignore
+            self.results = [self.make_result(hit) for hit in self.hits]
+
         self.last_key = key
-
-        self.total = self.hits.total.value  # type: ignore
-        self.results = [self.make_result(hit) for hit in self.hits]
-
         return self
 
 
