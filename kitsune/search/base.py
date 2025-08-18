@@ -47,39 +47,25 @@ class SumoDocument(DSLDocument):
 
         cls.Index.using = DEFAULT_ES_CONNECTION
 
-        # this is here to ensure subclasses of subclasses of SumoDocument (e.g. AnswerDocument)
-        # use the same name in their index as their parent class (e.g. QuestionDocument) since
-        # they share an index with that parent
+        # Determine index name based on inheritance hierarchy
         immediate_parent = cls.__mro__[1]
-        if immediate_parent is SumoDocument:
-            name = cls.__name__
-        else:
-            name = immediate_parent.__name__
+        name = cls.__name__ if immediate_parent is SumoDocument else immediate_parent.__name__
 
+        # Set up index aliases and settings
         cls.Index.base_name = f"{settings.ES_INDEX_PREFIX}_{name.lower()}"
         cls.Index.read_alias = f"{cls.Index.base_name}_read"
         cls.Index.write_alias = f"{cls.Index.base_name}_write"
-        # Index settings for semantic fields support
         cls.Index.settings = {
             "refresh_interval": DEFAULT_ES_REFRESH_INTERVAL,
-            "mapping.nested_fields.limit": 1000,  # Increased from default 50
-            "mapping.total_fields.limit": 2000,   # Increased from default 1000
+            "mapping.nested_fields.limit": 1000,
+            "mapping.total_fields.limit": 2000,
         }
-
-        # this is the attribute elastic-dsl actually uses to determine which index
-        # to query. we override the .search() method to get that to use the read
-        # alias:
         cls.Index.name = cls.Index.write_alias
 
     @classmethod
     def search(cls, **kwargs):
-        """
-        Create an `elasticsearch_dsl.Search` instance that will search over this `Document`.
-
-        If no `index` kwarg is supplied, use the Document's Index's `read_alias`.
-        """
-        if "index" not in kwargs:
-            kwargs["index"] = cls.Index.read_alias
+        """Create an elasticsearch_dsl.Search instance for this Document."""
+        kwargs.setdefault("index", cls.Index.read_alias)
         return super().search(**kwargs)
 
     @classmethod
@@ -115,165 +101,153 @@ class SumoDocument(DSLDocument):
         try:
             aliased_indices = list(es_client().indices.get_alias(name=alias))
         except NotFoundError:
-            aliased_indices = []
+            return None
 
         if len(aliased_indices) > 1:
-            raise RuntimeError(
-                f"{alias} points at more than one index, something has gone very wrong"
-            )
+            raise RuntimeError(f"{alias} points at more than one index")
 
         return aliased_indices[0] if aliased_indices else None
 
     @classmethod
     def prepare(cls, instance, parent_id=None, **kwargs):
-        """Prepare an object given a model instance.
-
-        parent_id: Supplying a parent_id will ignore any fields which aren't a
-        SumoLocaleAware field, and set the meta.id value to the parent_id one.
-        """
-
+        """Prepare an object given a model instance."""
         obj = cls()
 
-        doc_mapping = obj._doc_type.mapping
-        fields = list(doc_mapping)
-        fields.remove("indexed_on")
-        # Loop through the fields of each object and set the right values
-
-        # check if the instance is suitable for indexing
-        # the prepare method of each Document Type can mark an object
-        # not suitable for indexing based on criteria defined on each said method
-        if not hasattr(instance, "es_discard_doc"):
-            for f in fields:
-                # This will allow child classes to have their own methods
-                # in the form of prepare_field
-                prepare_method = getattr(obj, f"prepare_{f}", None)
-                value = obj.get_field_value(f, instance, prepare_method)
-
-                # Assign values to each field.
-                field_type = doc_mapping.resolve_field(f)
-                if isinstance(field_type, field.Object) and not (
-                    isinstance(value, InnerDoc)
-                    or (isinstance(value, list) and isinstance((value or [None])[0], InnerDoc))
-                ):
-                    # if the field is an Object but the value isn't an InnerDoc
-                    # or a list containing an InnerDoc then we're dealing with locales
-                    locale = obj.prepare_locale(instance)
-                    # Check specifically against None, False is a valid value
-                    if locale and (value is not None):
-                        obj[f] = {locale: value}
-
-                else:
-                    if (
-                        isinstance(field_type, field.Date)
-                        and isinstance(value, datetime)
-                        and timezone.is_naive(value)
-                    ):
-                        value = timezone.make_aware(value).astimezone(timezone.utc)
-
-                    if not parent_id:
-                        setattr(obj, f, value)
-        else:
+        if hasattr(instance, "es_discard_doc"):
             obj.es_discard_doc = "unindex_me"
+        else:
+            cls._prepare_fields(obj, instance, parent_id)
 
         obj.indexed_on = datetime.now(timezone.utc)
-        obj.meta.id = instance.pk
-        if parent_id:
-            obj.meta.id = parent_id
-
+        obj.meta.id = parent_id or instance.pk
         return obj
 
+    @classmethod
+    def _prepare_fields(cls, obj, instance, parent_id):
+        """Process and set field values for the document."""
+        doc_mapping = obj._doc_type.mapping
+        fields = [f for f in doc_mapping if f != "indexed_on"]
+
+        for field_name in fields:
+            cls._prepare_single_field(obj, instance, field_name, doc_mapping, parent_id)
+
+    @classmethod
+    def _prepare_single_field(cls, obj, instance, field_name, doc_mapping, parent_id):
+        """Prepare a single field value."""
+        prepare_method = getattr(obj, f"prepare_{field_name}", None)
+        value = obj.get_field_value(field_name, instance, prepare_method)
+
+        field_type = doc_mapping.resolve_field(field_name)
+
+        if cls._is_locale_object_field(field_type, value):
+            cls._set_locale_field(obj, instance, field_name, value)
+        else:
+            cls._set_regular_field(obj, field_name, field_type, value, parent_id)
+
+    @classmethod
+    def _is_locale_object_field(cls, field_type, value):
+        """Check if field is a locale-aware Object field."""
+        if not isinstance(field_type, field.Object):
+            return False
+
+        if isinstance(value, InnerDoc):
+            return False
+
+        if isinstance(value, list) and value and isinstance(value[0], InnerDoc):
+            return False
+
+        return True
+
+    @classmethod
+    def _set_locale_field(cls, obj, instance, field_name, value):
+        """Set value for locale-aware Object field."""
+        locale = obj.prepare_locale(instance)
+        if locale and value is not None:
+            obj[field_name] = {locale: value}
+
+    @classmethod
+    def _set_regular_field(cls, obj, field_name, field_type, value, parent_id):
+        """Set value for regular field."""
+        if isinstance(field_type, field.Date) and isinstance(value, datetime) and timezone.is_naive(value):
+            value = timezone.make_aware(value).astimezone(timezone.utc)
+
+        if not parent_id:
+            setattr(obj, field_name, value)
+
     def to_action(self, action=None, is_bulk=False, **kwargs):
-        """Method to construct the data for save, delete, update operations.
-
-        Useful for bulk operations.
-        """
-
-        # If an object has a discard field then mark it for deletion if exists
-        # This is the only case where this method ignores the passed arg action and
-        # overrides it with a deletion. This can happen if the `prepare` method of each
-        # document type has marked a document as not suitable for indexing
+        """Construct data for save, delete, update operations."""
+        # Override action for discarded documents
         if hasattr(self, "es_discard_doc"):
-            # Let's try to delete anything that might exist in ES
             action = "delete"
             kwargs = {}
 
-        # Default to index if no action is defined or if it's `save`
-        # if we have a bulk update, we need to include the meta info
-        # and return the data by calling the to_dict() method of DSL
         payload = self.to_dict(include_meta=is_bulk, skip_empty=False)
 
-        # If we are in a test environment, mark refresh=True so that
-        # documents will be updated/added directly in the index.
+        # Set refresh for test environment
         if settings.TEST and not is_bulk:
-            kwargs.update({"refresh": True})
+            kwargs["refresh"] = True
 
-        if not action or action == "index":
+        return self._execute_action(action or "index", payload, is_bulk, kwargs)
+
+    def _execute_action(self, action, payload, is_bulk, kwargs):
+        """Execute the specified action."""
+        if action == "index":
             return payload if is_bulk else self.save(**kwargs)
         elif action == "update":
-            # add any additional args like doc_as_upsert
-            payload.update(kwargs)
-
-            if is_bulk:
-                # this is a bit idiomatic b/c dsl does not have a wrapper around bulk operations
-                # we need to return the payload and let elasticsearch-py bulk method deal with
-                # the update
-                payload["doc"] = payload["_source"]
-                payload.update(
-                    {
-                        "_op_type": "update",
-                        "retry_on_conflict": UPDATE_RETRY_ON_CONFLICT,
-                    }
-                )
-                del payload["_source"]
-                return payload
-            return self.update(**payload)
+            return self._handle_update(payload, is_bulk, kwargs)
         elif action == "delete":
-            # if we have a bulk operation, drop the _source and mark the operation as deletion
-            if is_bulk:
-                payload.update({"_op_type": "delete"})
-                del payload["_source"]
-                return payload
-            # This is a single document op, delete it
-            kwargs.update({"ignore": [400, 404]})
-            return self.delete(**kwargs)
+            return self._handle_delete(payload, is_bulk, kwargs)
+
+    def _handle_update(self, payload, is_bulk, kwargs):
+        """Handle update action."""
+        payload.update(kwargs)
+
+        if is_bulk:
+            payload.update({
+                "doc": payload["_source"],
+                "_op_type": "update",
+                "retry_on_conflict": UPDATE_RETRY_ON_CONFLICT,
+            })
+            del payload["_source"]
+            return payload
+
+        return self.update(**payload)
+
+    def _handle_delete(self, payload, is_bulk, kwargs):
+        """Handle delete action."""
+        if is_bulk:
+            payload.update({"_op_type": "delete"})
+            del payload["_source"]
+            return payload
+
+        kwargs.update({"ignore": [400, 404]})
+        return self.delete(**kwargs)
 
     @classmethod
     def get_queryset(cls):
-        """
-        Return the manager for a document's model.
-        This allows child classes to add optimizations like select_related or prefetch_related
-        to improve indexing performance.
-        """
+        """Return the manager for a document's model."""
         return cls.get_model()._default_manager
 
     def get_field_value(self, field, instance, prepare_method):
-        """Allow child classes to define their own logic for getting field values."""
-        if prepare_method is not None:
-            return prepare_method(instance)
-        return getattr(instance, field)
+        """Get field value using prepare method or direct attribute access."""
+        return prepare_method(instance) if prepare_method else getattr(instance, field)
 
     def prepare_locale(self, instance):
-        """Return the locale of an object if exists."""
-        if instance.locale:
-            return instance.locale
-        return ""
+        """Return the locale of an object if it exists."""
+        return getattr(instance, 'locale', '') or ''
 
 
 class SumoSearchInterface(ABC):
-    """Base interface class for search classes.
-
-    Child classes should define values for the various abstract properties this
-    class has, relevant to the documents the child class is searching over.
-    """
+    """Base interface for search classes."""
 
     @abstractmethod
     def get_index(self):
-        """The index or comma-seperated indices to search over."""
+        """The index or comma-separated indices to search over."""
         ...
 
     @abstractmethod
     def get_fields(self):
-        """An array of fields to search over."""
+        """Fields to search over."""
         ...
 
     def get_settings(self):
@@ -282,40 +256,33 @@ class SumoSearchInterface(ABC):
 
     @abstractmethod
     def get_highlight_fields_options(self):
-        """An array of tuples of fields to highlight and their options."""
+        """Fields to highlight and their options."""
         ...
 
     @abstractmethod
     def get_filter(self):
-        """A query which filters for all documents to be searched over."""
+        """Query which filters documents to be searched."""
         ...
 
     @abstractmethod
     def build_query(self):
-        """Build a query to search over a specific set of documents."""
+        """Build a query to search over specific documents."""
         ...
 
     @abstractmethod
     def make_result(self, hit):
-        """Takes a hit and returns a result dictionary."""
+        """Convert a search hit to a result dictionary."""
         ...
 
     @abstractmethod
     def run(self, *args, **kwargs) -> Self:
-        """Perform search, placing the results in `self.results`, and the total
-        number of results (across all pages) in `self.total`. Chainable."""
+        """Perform search, populating results and total. Chainable."""
         ...
 
 
 @dataclass
 class SumoSearch(SumoSearchInterface):
-    """Base class for search classes.
-
-    Implements the run() function, which will perform the search.
-
-    Child classes should define values for the various abstract properties this
-    class inherits, relevant to the documents the child class is searching over.
-    """
+    """Base class for search classes implementing the run() function."""
 
     total: int = dfield(default=0, init=False)
     hits: list[AttrDict] = dfield(default_factory=list, init=False)
@@ -351,159 +318,140 @@ class SumoSearch(SumoSearchInterface):
         if not self.query or not self.query.strip():
             return False
 
-        # Quick checks for obvious advanced syntax
-        if ':' in self.query or '"' in self.query:
-            return True
-
-        # Check for boolean operators using word boundaries to avoid false positives
-        boolean_pattern = r'\b(AND|OR|NOT)\b'
-        if re.search(boolean_pattern, self.query):
-            return True
-
-        return False
+        # Check for advanced syntax patterns
+        return (':' in self.query or
+                '"' in self.query or
+                bool(re.search(r'\b(AND|OR|NOT)\b', self.query)))
 
     def build_query(self):
-        """Build a query to search over a specific set of documents."""
-        parsed = None
+        """Build a query to search over specific documents."""
+        parsed = self._parse_query_safely() or TermToken(self.query)
 
-        if self.parse_query:
-            try:
-                parsed = Parser(self.query)
-            except ParseException:
-                pass
+        return parsed.elastic_query({
+            "fields": self.get_fields(),
+            "settings": self.get_settings(),
+        })
 
-        if not parsed:
-            parsed = TermToken(self.query)
+    def _parse_query_safely(self):
+        """Safely parse query, returning None on failure."""
+        if not self.parse_query:
+            return None
 
-        return parsed.elastic_query(
-            {
-                "fields": self.get_fields(),
-                "settings": self.get_settings(),
-            }
-        )
+        try:
+            return Parser(self.query)
+        except ParseException:
+            return None
 
     def run(self, key: int | slice = slice(0, settings.SEARCH_RESULTS_PER_PAGE)) -> Self:
-        """Perform search, placing the results in `self.results`, and the total
-        number of results (across all pages) in `self.total`. Chainable."""
-
-        # Check if the filter is an RRF query
+        """Perform search, populating results and total. Chainable."""
         filter_query = self.get_filter()
 
-        # Import RRFQuery here to avoid circular import (search.py imports base.py)
-        from kitsune.search.search import RRFQuery
-
-        if isinstance(filter_query, RRFQuery):
-            # Handle RRF queries using direct ES client
-            client = es_client()
-
-            # Calculate from/size from key
-            if isinstance(key, slice):
-                from_offset = key.start or 0
-                size = (key.stop or settings.SEARCH_RESULTS_PER_PAGE) - from_offset
+        try:
+            if self._is_rrf_query(filter_query):
+                self._run_rrf_search(filter_query, key)
             else:
-                from_offset = key
-                size = 1
-
-            # Build the search body with RRF
-            search_body = filter_query.to_dict()
-            search_body["from"] = from_offset
-            search_body["size"] = size
-
-            # Perform the search
-            try:
-                result = client.search(
-                    index=self.get_index(),
-                    body=search_body,
-                    **settings.ES_SEARCH_PARAMS
-                )
-            except RequestError as e:
-                if self.parse_query:
-                    # try search again, but without parsing any advanced syntax
-                    self.parse_query = False
-                    return self.run(key)
-                raise e
-
-            # Convert results to AttrDict format for compatibility
-            self.hits = [AttrDict(hit["_source"]) for hit in result["hits"]["hits"]]
-            for i, hit in enumerate(self.hits):
-                hit.meta = AttrDict({
-                    "score": result["hits"]["hits"][i]["_score"],
-                    "index": result["hits"]["hits"][i]["_index"],
-                    "id": result["hits"]["hits"][i]["_id"]
-                })
-
-            self.total = result["hits"]["total"]["value"]
-            self.results = [self.make_result(hit) for hit in self.hits]
-        else:
-            # Original non-RRF path
-            search = DSLSearch(using=es_client(), index=self.get_index()).params(
-                **settings.ES_SEARCH_PARAMS
-            )
-
-            # add the search class' filter
-            search = search.query(filter_query)
-            # add highlights for the search class' highlight_fields
-            for highlight_field, options in self.get_highlight_fields_options():
-                search = search.highlight(highlight_field, **options)
-            # slice search
-            search = search[key]
-
-            # perform search
-            try:
-                result = search.execute()
-            except RequestError as e:
-                if self.parse_query:
-                    # try search again, but without parsing any advanced syntax
-                    self.parse_query = False
-                    return self.run(key)
-                raise e
-
-            self.hits = result.hits
-            self.total = self.hits.total.value  # type: ignore
-            self.results = [self.make_result(hit) for hit in self.hits]
+                self._run_dsl_search(filter_query, key)
+        except RequestError as e:
+            if self.parse_query:
+                self.parse_query = False
+                return self.run(key)
+            raise e
 
         self.last_key = key
         return self
 
+    def _is_rrf_query(self, filter_query):
+        """Check if filter query is an RRF query."""
+        # Import here to avoid circular import
+        from kitsune.search.search import RRFQuery
+        return isinstance(filter_query, RRFQuery)
+
+    def _run_rrf_search(self, filter_query, key):
+        """Handle RRF queries using direct ES client."""
+        client = es_client()
+        from_offset, size = self._calculate_pagination(key)
+
+        search_body = filter_query.to_dict()
+        search_body.update({"from": from_offset, "size": size})
+
+        result = client.search(
+            index=self.get_index(),
+            body=search_body,
+            **settings.ES_SEARCH_PARAMS
+        )
+
+        self._process_rrf_results(result)
+
+    def _run_dsl_search(self, filter_query, key):
+        """Handle standard DSL queries."""
+        search = DSLSearch(using=es_client(), index=self.get_index()).params(
+            **settings.ES_SEARCH_PARAMS
+        )
+
+        search = search.query(filter_query)
+
+        for highlight_field, options in self.get_highlight_fields_options():
+            search = search.highlight(highlight_field, **options)
+
+        search = search[key]
+        result = search.execute()
+
+        self.hits = result.hits
+        self.total = result.hits.total.value  # type: ignore
+        self.results = [self.make_result(hit) for hit in self.hits]
+
+    def _calculate_pagination(self, key):
+        """Calculate from_offset and size from key."""
+        if isinstance(key, slice):
+            from_offset = key.start or 0
+            size = (key.stop or settings.SEARCH_RESULTS_PER_PAGE) - from_offset
+        else:
+            from_offset = key
+            size = 1
+        return from_offset, size
+
+    def _process_rrf_results(self, result):
+        """Process RRF search results into AttrDict format."""
+        hits_data = result["hits"]["hits"]
+        self.hits = []
+
+        for i, hit_data in enumerate(hits_data):
+            hit = AttrDict(hit_data["_source"])
+            hit.meta = AttrDict({
+                "score": hit_data["_score"],
+                "index": hit_data["_index"],
+                "id": hit_data["_id"]
+            })
+            self.hits.append(hit)
+
+        self.total = result["hits"]["total"]["value"]
+        self.results = [self.make_result(hit) for hit in self.hits]
+
 
 class SumoSearchPaginator(DjPaginator):
-    """
-    Paginator for `SumoSearch` classes.
-
-    Inherits from the default django paginator with a few adjustments. The default paginator
-    attempts to call len() on the `object_list` first, and then query for an individual page.
-
-    However, since elasticsearch returns the total number of results at the same time as querying
-    for a single page, we can remove an extra query by only doing len() based operations after
-    querying for a page.
-
-    Because of this, the `orphans` argument won't work.
-    """
+    """Paginator for SumoSearch classes optimized for Elasticsearch."""
 
     def pre_validate_number(self, number):
-        """
-        Validate the given 1-based page number, without checking if the number is greater than
-        the total number of pages.
-        """
+        """Validate page number without checking total pages."""
         try:
             if isinstance(number, float) and not number.is_integer():
                 raise ValueError
             number = int(number)
         except (TypeError, ValueError):
             raise PageNotAnInteger(_("That page number is not an integer"))
+
         if number < 1:
             raise EmptyPage(_("That page number is less than 1"))
+
         return number
 
     def page(self, number):
         """Return a Page object for the given 1-based page number."""
-        # first validate the number is an integer >= 1
         number = self.pre_validate_number(number)
 
         bottom = (number - 1) * self.per_page
         top = bottom + self.per_page
         page = self._get_page(self.object_list[bottom:top], number, self)
 
-        # now we have the total, do the full validation of the number
         self.validate_number(number)
         return page
