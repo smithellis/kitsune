@@ -453,7 +453,6 @@ class CompoundSearch(SumoSearch):
     _children: list[SumoSearch] = dfield(default_factory=list, init=False)
 
     def __post_init__(self):
-        super().__post_init__()
         self._parse_query = True
 
     @property  # type: ignore[misc]
