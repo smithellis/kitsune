@@ -31,6 +31,16 @@ from kitsune.wiki.config import CATEGORIES
 from kitsune.wiki.parser import wiki_to_html
 
 QUESTION_DAYS_DELTA = 365 * 2
+
+
+class RRFQuery:
+    """Wrapper for Elasticsearch RRF (Reciprocal Rank Fusion) queries."""
+
+    def __init__(self, query_dict):
+        self.query_dict = query_dict
+
+    def to_dict(self):
+        return self.query_dict
 FVH_HIGHLIGHT_OPTIONS = {
     "type": "fvh",
     # order highlighted fragments by their relevance:
@@ -113,44 +123,130 @@ class QuestionSearch(SumoSearch):
             ],
         }
 
-    def is_simple_search(self, token=None):
-        """Determine if the search query is simple (no advanced operators) or advanced.
-
-        Advanced searches are those containing:
-        - Field operators (field:value)
-        - Boolean operators (AND, OR, NOT)
-        - Range tokens (date ranges, numeric ranges)
-        - Exact tokens (quoted strings)
-
-        Simple searches contain only basic terms and space-separated phrases.
-        """
+    def is_advanced_query(self, token=None):
+        """Check if query uses advanced search syntax."""
         if token is None:
             if not self.query or not self.query.strip():
+                return False
+
+            # Quick check for field operators (field:value syntax)
+            if ":" in self.query:
+                # Check if it's a field operator by looking for known field prefixes
+                for field in ["title", "content", "question", "answer"]:
+                    if f"{field}:" in self.query:
+                        return True
+
+            # Check for quoted strings (exact match syntax)
+            if '"' in self.query:
                 return True
 
             try:
                 parsed = Parser(self.query)
-                return self.is_simple_search(parsed.parsed)
+                return self.is_advanced_query(parsed.parsed)
             except ParseException:
-                # If parsing fails, it's definitely a simple search
-                return True
+                return False
 
-        # Advanced operators and tokens indicate an advanced search
+        # Advanced operators and tokens
         if isinstance(
             token, FieldOperator | AndOperator | OrOperator | NotOperator | RangeToken | ExactToken
         ):
-            return False
-
-        # TermToken is always simple
-        if isinstance(token, TermToken):
             return True
 
-        # SpaceOperator is simple only if all its arguments are simple
+        # SpaceOperator may contain advanced tokens
         if isinstance(token, SpaceOperator):
-            return all(self.is_simple_search(arg) for arg in token.arguments)
+            return any(self.is_advanced_query(arg) for arg in token.arguments)
 
-        # Any other token types are advanced by default
         return False
+
+    def get_base_filters(self):
+        """Get base filters that apply to all query types."""
+        filters = [
+            DSLQ("term", _index=self.get_index()),
+            DSLQ("exists", field=f"question_title.{self.locale}"),
+            DSLQ(
+                "range",
+                question_created={
+                    "gte": datetime.now(UTC) - timedelta(days=QUESTION_DAYS_DELTA)
+                },
+            ),
+        ]
+        if not self.is_advanced_query():
+            filters.append(DSLQ("term", question_is_archived=False))
+        if self.product:
+            filters.append(DSLQ("term", question_product_id=self.product.id))
+        return filters
+
+    def build_traditional_query_with_filters(self):
+        """Build traditional query with filters applied."""
+        parsed = None
+        if self.parse_query:
+            try:
+                parsed = Parser(self.query)
+            except ParseException:
+                pass
+        if not parsed:
+            parsed = TermToken(self.query)
+
+        query = parsed.elastic_query({
+            "fields": self.get_fields(),
+            "settings": self.get_settings(),
+        })
+        return DSLQ(
+            "bool",
+            filter=self.get_base_filters(),
+            must_not=DSLQ("exists", field="updated"),
+            must=query
+        )
+
+    def build_semantic_query_with_filters(self):
+        """Build semantic query with filters applied."""
+        semantic_fields = [
+            "question_title_semantic",
+            "question_content_semantic",
+            "answer_content_semantic",
+        ]
+
+        semantic_queries = []
+        for field in semantic_fields:
+            semantic_queries.append(
+                DSLQ("semantic", field=field, query=self.query)
+            )
+
+        combined_semantic = DSLQ("bool", should=semantic_queries, minimum_should_match=1)
+        return DSLQ(
+            "bool",
+            filter=self.get_base_filters(),
+            must_not=DSLQ("exists", field="updated"),
+            must=combined_semantic
+        )
+
+    def build_hybrid_rrf_query(self):
+        """Build RRF hybrid query combining traditional and semantic search."""
+        traditional_query = self.build_traditional_query_with_filters()
+        semantic_query = self.build_semantic_query_with_filters()
+
+        rrf_query = {
+            "retriever": {
+                "rrf": {
+                    "retrievers": [
+                        {"standard": {"query": traditional_query.to_dict()}},
+                        {"standard": {"query": semantic_query.to_dict()}}
+                    ],
+                    "rank_window_size": 100,
+                    "rank_constant": 20
+                }
+            }
+        }
+        return RRFQuery(rrf_query)
+
+    def build_query(self):
+        """Build query - use hybrid RRF for simple queries, traditional for advanced."""
+        if self.is_advanced_query():
+            # Advanced query - use traditional parser
+            return super().build_query()
+        else:
+            # Simple query - use hybrid RRF
+            return self.build_hybrid_rrf_query()
 
     def get_highlight_fields_options(self):
         fields = [
@@ -160,32 +256,19 @@ class QuestionSearch(SumoSearch):
         return [(field, FVH_HIGHLIGHT_OPTIONS) for field in fields]
 
     def get_filter(self):
-        filters = [
-            # restrict to the question index
-            DSLQ("term", _index=self.get_index()),
-            # ensure that there is a title for the passed locale
-            DSLQ("exists", field=f"question_title.{self.locale}"),
-            # only return questions created within QUESTION_DAYS_DELTA
-            DSLQ(
-                "range",
-                question_created={
-                    "gte": datetime.now(UTC) - timedelta(days=QUESTION_DAYS_DELTA)
-                },
-            ),
-        ]
-
-        if self.is_simple_search():
-            filters.append(DSLQ("term", question_is_archived=False))
-
-        if self.product:
-            filters.append(DSLQ("term", question_product_id=self.product.id))
-        return DSLQ(
-            "bool",
-            filter=filters,
-            # exclude AnswerDocuments from the search:
-            must_not=DSLQ("exists", field="updated"),
-            must=self.build_query(),
-        )
+        # Check if we're building an RRF query
+        query = self.build_query()
+        if isinstance(query, RRFQuery):
+            # For RRF queries, filters are already applied inside the retrievers
+            return query
+        else:
+            # Traditional query flow
+            return DSLQ(
+                "bool",
+                filter=self.get_base_filters(),
+                must_not=DSLQ("exists", field="updated"),
+                must=query
+            )
 
     def make_result(self, hit):
         # generate a summary for search:
@@ -250,16 +333,122 @@ class WikiSearch(SumoSearch):
         ]
         return [(field, FVH_HIGHLIGHT_OPTIONS) for field in fields]
 
-    def get_filter(self):
-        # Add default filters:
+    def is_advanced_query(self, token=None):
+        """Check if query uses advanced search syntax."""
+        if token is None:
+            if not self.query or not self.query.strip():
+                return False
+
+            # Quick check for field operators (field:value syntax)
+            if ":" in self.query:
+                # Check if it's a field operator by looking for known field prefixes
+                for field in ["title", "content", "category"]:
+                    if f"{field}:" in self.query:
+                        return True
+
+            # Check for quoted strings (exact match syntax)
+            if '"' in self.query:
+                return True
+
+            try:
+                parsed = Parser(self.query)
+                return self.is_advanced_query(parsed.parsed)
+            except ParseException:
+                return False
+
+        # Advanced operators and tokens
+        if isinstance(
+            token, FieldOperator | AndOperator | OrOperator | NotOperator | RangeToken | ExactToken
+        ):
+            return True
+
+        # SpaceOperator may contain advanced tokens
+        if isinstance(token, SpaceOperator):
+            return any(self.is_advanced_query(arg) for arg in token.arguments)
+
+        return False
+
+    def get_base_filters(self):
+        """Get base filters that apply to all query types."""
         filters = [
-            # limit scope to the Wiki index
             DSLQ("term", _index=self.get_index()),
             DSLQ("exists", field=f"title.{self.locale}"),
         ]
         if self.product:
             filters.append(DSLQ("term", product_ids=self.product.id))
-        return DSLQ("bool", filter=filters, must=self.build_query())
+        return filters
+
+    def build_traditional_query_with_filters(self):
+        """Build traditional query with filters applied."""
+        parsed = None
+        if self.parse_query:
+            try:
+                parsed = Parser(self.query)
+            except ParseException:
+                pass
+        if not parsed:
+            parsed = TermToken(self.query)
+
+        query = parsed.elastic_query({
+            "fields": self.get_fields(),
+            "settings": self.get_settings(),
+        })
+        return DSLQ("bool", filter=self.get_base_filters(), must=query)
+
+    def build_semantic_query_with_filters(self):
+        """Build semantic query with filters applied."""
+        semantic_fields = [
+            "title_semantic",
+            "content_semantic",
+            "summary_semantic",
+        ]
+
+        semantic_queries = []
+        for field in semantic_fields:
+            semantic_queries.append(
+                DSLQ("semantic", field=field, query=self.query)
+            )
+
+        combined_semantic = DSLQ("bool", should=semantic_queries, minimum_should_match=1)
+        return DSLQ("bool", filter=self.get_base_filters(), must=combined_semantic)
+
+    def build_hybrid_rrf_query(self):
+        """Build RRF hybrid query combining traditional and semantic search."""
+        traditional_query = self.build_traditional_query_with_filters()
+        semantic_query = self.build_semantic_query_with_filters()
+
+        rrf_query = {
+            "retriever": {
+                "rrf": {
+                    "retrievers": [
+                        {"standard": {"query": traditional_query.to_dict()}},
+                        {"standard": {"query": semantic_query.to_dict()}}
+                    ],
+                    "rank_window_size": 100,
+                    "rank_constant": 20
+                }
+            }
+        }
+        return RRFQuery(rrf_query)
+
+    def build_query(self):
+        """Build query - use hybrid RRF for simple queries, traditional for advanced."""
+        if self.is_advanced_query():
+            # Advanced query - use traditional parser
+            return super().build_query()
+        else:
+            # Simple query - use hybrid RRF
+            return self.build_hybrid_rrf_query()
+
+    def get_filter(self):
+        # Check if we're building an RRF query
+        query = self.build_query()
+        if isinstance(query, RRFQuery):
+            # For RRF queries, filters are already applied inside the retrievers
+            return query
+        else:
+            # Traditional query flow
+            return DSLQ("bool", filter=self.get_base_filters(), must=query)
 
     def make_result(self, hit):
         # generate a summary for search:

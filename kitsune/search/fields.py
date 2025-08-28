@@ -44,3 +44,16 @@ SumoKeywordField = partial(construct_locale_field, field=Keyword)
 # {'en-US': Text(analyzer_for_the_specific_locale)}
 SumoLocaleAwareTextField = partial(SumoTextField, locales=SUPPORTED_LANGUAGES)
 SumoLocaleAwareKeywordField = partial(SumoKeywordField, locales=SUPPORTED_LANGUAGES)
+
+
+class SemanticTextField:
+    """A semantic text field that uses inference for embeddings."""
+
+    def __init__(self, inference_id="my-elser-endpoint"):
+        self.inference_id = inference_id
+
+    def to_dict(self):
+        return {
+            "type": "semantic_text",
+            "inference_id": self.inference_id,
+        }

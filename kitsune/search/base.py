@@ -365,33 +365,89 @@ class SumoSearch(SumoSearchInterface):
         """Perform search, placing the results in `self.results`, and the total
         number of results (across all pages) in `self.total`. Chainable."""
 
-        search = DSLSearch(using=es_client(), index=self.get_index()).params(
-            **settings.ES_SEARCH_PARAMS
-        )
+        # Import here to avoid circular dependency
+        from kitsune.search.search import RRFQuery
 
-        # add the search class' filter
-        search = search.query(self.get_filter())
-        # add highlights for the search class' highlight_fields
-        for highlight_field, options in self.get_highlight_fields_options():
-            search = search.highlight(highlight_field, **options)
-        # slice search
-        search = search[key]
+        # Get the filter/query
+        filter_or_query = self.get_filter()
 
-        # perform search
-        try:
-            result = search.execute()
-        except RequestError as e:
-            if self.parse_query:
-                # try search again, but without parsing any advanced syntax
-                self.parse_query = False
-                return self.run(key)
-            raise e
+        # Check if it's an RRF query
+        if isinstance(filter_or_query, RRFQuery):
+            # Handle RRF query with direct ES client
+            client = es_client()
 
-        self.hits = result.hits
-        self.last_key = key
+            # Determine pagination
+            if isinstance(key, slice):
+                start = key.start or 0
+                stop = key.stop or settings.SEARCH_RESULTS_PER_PAGE
+                size = stop - start
+            else:
+                start = key
+                size = 1
 
-        self.total = self.hits.total.value  # type: ignore
-        self.results = [self.make_result(hit) for hit in self.hits]
+            # Add pagination to RRF query
+            rrf_body = filter_or_query.to_dict()
+            rrf_body["from"] = start
+            rrf_body["size"] = size
+
+            # Execute RRF search
+            try:
+                result = client.search(
+                    index=self.get_index(),
+                    body=rrf_body,
+                    **settings.ES_SEARCH_PARAMS
+                )
+            except RequestError as e:
+                if self.parse_query:
+                    # try search again, but without parsing any advanced syntax
+                    self.parse_query = False
+                    return self.run(key)
+                raise e
+
+            # Process RRF results
+            self.hits = []
+            for hit in result["hits"]["hits"]:
+                # Convert raw hit to AttrDict for compatibility
+                attr_hit = AttrDict(hit["_source"])
+                attr_hit.meta = AttrDict({
+                    "id": hit["_id"],
+                    "score": hit.get("_score", 0),
+                    "index": hit["_index"]
+                })
+                self.hits.append(attr_hit)
+
+            self.last_key = key
+            self.total = min(result["hits"]["total"]["value"], 100)  # Cap at RRF window size
+            self.results = [self.make_result(hit) for hit in self.hits]
+        else:
+            # Traditional DSL search flow
+            search = DSLSearch(using=es_client(), index=self.get_index()).params(
+                **settings.ES_SEARCH_PARAMS
+            )
+
+            # add the search class' filter
+            search = search.query(filter_or_query)
+            # add highlights for the search class' highlight_fields
+            for highlight_field, options in self.get_highlight_fields_options():
+                search = search.highlight(highlight_field, **options)
+            # slice search
+            search = search[key]
+
+            # perform search
+            try:
+                result = search.execute()
+            except RequestError as e:
+                if self.parse_query:
+                    # try search again, but without parsing any advanced syntax
+                    self.parse_query = False
+                    return self.run(key)
+                raise e
+
+            self.hits = result.hits
+            self.last_key = key
+
+            self.total = self.hits.total.value  # type: ignore
+            self.results = [self.make_result(hit) for hit in self.hits]
 
         return self
 
