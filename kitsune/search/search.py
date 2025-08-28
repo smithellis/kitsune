@@ -25,7 +25,7 @@ from kitsune.search.parser.operators import (
     OrOperator,
     SpaceOperator,
 )
-from kitsune.search.parser.tokens import ExactToken, RangeToken, TermToken
+from kitsune.search.parser.tokens import ExactToken, RangeToken
 from kitsune.sumo.urlresolvers import reverse
 from kitsune.wiki.config import CATEGORIES
 from kitsune.wiki.parser import wiki_to_html
@@ -176,68 +176,22 @@ class QuestionSearch(SumoSearch):
             filters.append(DSLQ("term", question_product_id=self.product.id))
         return filters
 
-    def build_traditional_query_with_filters(self):
-        """Build traditional query with filters applied."""
-        parsed = None
-        if self.parse_query:
-            try:
-                parsed = Parser(self.query)
-            except ParseException:
-                pass
-        if not parsed:
-            parsed = TermToken(self.query)
+    def get_semantic_fields(self):
+        """Return semantic fields for QuestionSearch."""
+        return [
+            "question_title_semantic",
+            "question_content_semantic",
+            "answer_content_semantic",
+        ]
 
-        query = parsed.elastic_query({
-            "fields": self.get_fields(),
-            "settings": self.get_settings(),
-        })
+    def _apply_filters_to_query(self, query):
+        """Apply question-specific filters to a query."""
         return DSLQ(
             "bool",
             filter=self.get_base_filters(),
             must_not=DSLQ("exists", field="updated"),
             must=query
         )
-
-    def build_semantic_query_with_filters(self):
-        """Build semantic query with filters applied."""
-        semantic_fields = [
-            "question_title_semantic",
-            "question_content_semantic",
-            "answer_content_semantic",
-        ]
-
-        semantic_queries = []
-        for field in semantic_fields:
-            semantic_queries.append(
-                DSLQ("semantic", field=field, query=self.query)
-            )
-
-        combined_semantic = DSLQ("bool", should=semantic_queries, minimum_should_match=1)
-        return DSLQ(
-            "bool",
-            filter=self.get_base_filters(),
-            must_not=DSLQ("exists", field="updated"),
-            must=combined_semantic
-        )
-
-    def build_hybrid_rrf_query(self):
-        """Build RRF hybrid query combining traditional and semantic search."""
-        traditional_query = self.build_traditional_query_with_filters()
-        semantic_query = self.build_semantic_query_with_filters()
-
-        rrf_query = {
-            "retriever": {
-                "rrf": {
-                    "retrievers": [
-                        {"standard": {"query": traditional_query.to_dict()}},
-                        {"standard": {"query": semantic_query.to_dict()}}
-                    ],
-                    "rank_window_size": 100,
-                    "rank_constant": 20
-                }
-            }
-        }
-        return RRFQuery(rrf_query)
 
     def build_query(self):
         """Build query - use hybrid RRF for simple queries, traditional for advanced."""
@@ -378,58 +332,13 @@ class WikiSearch(SumoSearch):
             filters.append(DSLQ("term", product_ids=self.product.id))
         return filters
 
-    def build_traditional_query_with_filters(self):
-        """Build traditional query with filters applied."""
-        parsed = None
-        if self.parse_query:
-            try:
-                parsed = Parser(self.query)
-            except ParseException:
-                pass
-        if not parsed:
-            parsed = TermToken(self.query)
-
-        query = parsed.elastic_query({
-            "fields": self.get_fields(),
-            "settings": self.get_settings(),
-        })
-        return DSLQ("bool", filter=self.get_base_filters(), must=query)
-
-    def build_semantic_query_with_filters(self):
-        """Build semantic query with filters applied."""
-        semantic_fields = [
+    def get_semantic_fields(self):
+        """Return semantic fields for WikiSearch."""
+        return [
             "title_semantic",
             "content_semantic",
             "summary_semantic",
         ]
-
-        semantic_queries = []
-        for field in semantic_fields:
-            semantic_queries.append(
-                DSLQ("semantic", field=field, query=self.query)
-            )
-
-        combined_semantic = DSLQ("bool", should=semantic_queries, minimum_should_match=1)
-        return DSLQ("bool", filter=self.get_base_filters(), must=combined_semantic)
-
-    def build_hybrid_rrf_query(self):
-        """Build RRF hybrid query combining traditional and semantic search."""
-        traditional_query = self.build_traditional_query_with_filters()
-        semantic_query = self.build_semantic_query_with_filters()
-
-        rrf_query = {
-            "retriever": {
-                "rrf": {
-                    "retrievers": [
-                        {"standard": {"query": traditional_query.to_dict()}},
-                        {"standard": {"query": semantic_query.to_dict()}}
-                    ],
-                    "rank_window_size": 100,
-                    "rank_constant": 20
-                }
-            }
-        }
-        return RRFQuery(rrf_query)
 
     def build_query(self):
         """Build query - use hybrid RRF for simple queries, traditional for advanced."""

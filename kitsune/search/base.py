@@ -12,6 +12,7 @@ from django.utils.translation import gettext as _
 from elasticsearch import NotFoundError, RequestError
 from elasticsearch.dsl import Document as DSLDocument
 from elasticsearch.dsl import InnerDoc, MetaField, field
+from elasticsearch.dsl import Q as DSLQ
 from elasticsearch.dsl import Search as DSLSearch
 from elasticsearch.dsl.utils import AttrDict
 from pyparsing import ParseException
@@ -360,6 +361,68 @@ class SumoSearch(SumoSearchInterface):
                 "settings": self.get_settings(),
             }
         )
+
+    def build_traditional_query_with_filters(self):
+        """Build traditional query with filters applied."""
+        parsed = None
+        if self.parse_query:
+            try:
+                parsed = Parser(self.query)
+            except ParseException:
+                pass
+        if not parsed:
+            parsed = TermToken(self.query)
+
+        query = parsed.elastic_query({
+            "fields": self.get_fields(),
+            "settings": self.get_settings(),
+        })
+        return self._apply_filters_to_query(query)
+
+    def build_semantic_query_with_filters(self):
+        """Build semantic query with filters applied."""
+        semantic_fields = self.get_semantic_fields()
+
+        semantic_queries = []
+        for field_name in semantic_fields:
+            semantic_queries.append(
+                DSLQ("semantic", field=field_name, query=self.query)
+            )
+
+        combined_semantic = DSLQ("bool", should=semantic_queries, minimum_should_match=1)
+        return self._apply_filters_to_query(combined_semantic)
+
+    def build_hybrid_rrf_query(self):
+        """Build RRF hybrid query combining traditional and semantic search."""
+        # Import here to avoid circular dependency
+        from kitsune.search.search import RRFQuery
+
+        traditional_query = self.build_traditional_query_with_filters()
+        semantic_query = self.build_semantic_query_with_filters()
+
+        rrf_query = {
+            "retriever": {
+                "rrf": {
+                    "retrievers": [
+                        {"standard": {"query": traditional_query.to_dict()}},
+                        {"standard": {"query": semantic_query.to_dict()}}
+                    ],
+                    "rank_window_size": 100,
+                    "rank_constant": 20
+                }
+            }
+        }
+        return RRFQuery(rrf_query)
+
+    def get_semantic_fields(self):
+        """Return list of semantic fields for this search. Override in subclasses."""
+        return []
+
+    def _apply_filters_to_query(self, query):
+        """Apply base filters to a query. Override in subclasses for specific behavior."""
+        if hasattr(self, 'get_base_filters'):
+            return DSLQ("bool", filter=self.get_base_filters(), must=query)
+        return query
 
     def run(self, key: int | slice = slice(0, settings.SEARCH_RESULTS_PER_PAGE)) -> Self:
         """Perform search, placing the results in `self.results`, and the total
