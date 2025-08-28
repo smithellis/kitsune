@@ -6,7 +6,7 @@ import trackEvent from "sumo/js/analytics";
 /* https://location.services.mozilla.com/contact */
 
 (function() {
-  var GeoIPUrl = 'https://location.services.mozilla.com/v1/country?key=fa6d7fc9-e091-4be1-b6c1-5ada5815ae9d';
+  var GeoIPUrl = '/geoip-country';
   var countryData = {
     'country_name': $.cookie('geoip_country_name'),
     'country_code': $.cookie('geoip_country_code')

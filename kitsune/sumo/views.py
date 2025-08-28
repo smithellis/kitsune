@@ -2,6 +2,7 @@ import json
 import logging
 import socket
 
+import requests
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.http import (
@@ -64,6 +65,29 @@ def geoip_suggestion(request):
             }
 
     return HttpResponse(json.dumps(response), content_type="application/json")
+
+
+@require_GET
+def geoip_country(request):
+    """
+    Proxy for Mozilla Location Services GeoIP API to avoid CORS issues.
+    Makes server-side request to get user's country information.
+    """
+    try:
+        # Make request to Mozilla Location Services
+        response = requests.get(
+            settings.MOZILLA_LOCATION_SERVICE,
+            timeout=5,
+            headers={'User-Agent': 'SuMo/1.0'}
+        )
+        response.raise_for_status()
+
+        # Return the JSON response from the service
+        return JsonResponse(response.json())
+    except requests.exceptions.RequestException as e:
+        logging.warning(f"GeoIP request failed: {e}")
+        # Return empty response on failure so the client can handle gracefully
+        return JsonResponse({}, status=503)
 
 
 def handle403(request):
