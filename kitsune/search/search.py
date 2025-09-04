@@ -77,11 +77,14 @@ class QuestionSearch(SumoSearch):
         return QuestionDocument.Index.read_alias
 
     def get_fields(self):
+        """Return enhanced fields based on query intent."""
+        boosts = self.get_enhanced_fields()
+
         return [
-            # ^x boosts the score from that field by x amount
-            f"question_title.{self.locale}^1",  # Reduced boost to let wiki titles compete better
-            f"question_content.{self.locale}",
-            f"answer_content.{self.locale}",
+            # Enhanced boosting based on query intent
+            f"question_title.{self.locale}^{boosts['title_boost']}",
+            f"question_content.{self.locale}^{boosts['content_boost']}",
+            f"answer_content.{self.locale}^{boosts['summary_boost']}",  # Answers treated as summary
         ]
 
     def get_settings(self):
@@ -204,12 +207,15 @@ class WikiSearch(SumoSearch):
         return WikiDocument.Index.read_alias
 
     def get_fields(self):
+        """Return enhanced fields based on query intent."""
+        boosts = self.get_enhanced_fields()
+
         return [
-            # ^x boosts the score from that field by x amount
-            f"keywords.{self.locale}^8",
-            f"title.{self.locale}^15",  # Further increased boost for wiki titles to beat questions
-            f"summary.{self.locale}^4",
-            f"content.{self.locale}^2",
+            # Enhanced boosting based on query intent
+            f"keywords.{self.locale}^{boosts['keywords_boost']}",
+            f"title.{self.locale}^{boosts['title_boost']}",
+            f"summary.{self.locale}^{boosts['summary_boost']}",
+            f"content.{self.locale}^{boosts['content_boost']}",
         ]
 
     def get_settings(self):
@@ -448,14 +454,17 @@ class UnifiedRRFSearch(SumoSearch):
         return ",".join(indices)
 
     def get_fields(self):
+        """Return enhanced combined fields based on query intent."""
+        boosts = self.get_enhanced_fields()
+
         return [
-            f"question_title.{self.locale}^2",
-            f"question_content.{self.locale}",
-            f"answer_content.{self.locale}",
-            f"keywords.{self.locale}^8",
-            f"title.{self.locale}^6",
-            f"summary.{self.locale}^4",
-            f"content.{self.locale}^2",
+            f"question_title.{self.locale}^{boosts['title_boost']}",
+            f"question_content.{self.locale}^{boosts['content_boost']}",
+            f"answer_content.{self.locale}^{boosts['summary_boost']}",
+            f"keywords.{self.locale}^{boosts['keywords_boost']}",
+            f"title.{self.locale}^{boosts['title_boost']}",
+            f"summary.{self.locale}^{boosts['summary_boost']}",
+            f"content.{self.locale}^{boosts['content_boost']}",
             "username",
             "name",
             "thread_title",
@@ -497,19 +506,29 @@ class UnifiedRRFSearch(SumoSearch):
 
         # QuestionSearch RRF
         self.question_search.run(slice(0, 50))
-        all_results.extend(self.question_search.results)
+        question_results = self.question_search.results
+        all_results.extend(question_results)
 
         # WikiSearch RRF
         self.wiki_search.run(slice(0, 50))
-        all_results.extend(self.wiki_search.results)
+        wiki_results = self.wiki_search.results
+        all_results.extend(wiki_results)
 
-        # ProfileSearch (traditional)
+        # ProfileSearch (traditional) - enhance with semantic similarity
         self.profile_search.run(slice(0, 100))
-        all_results.extend(self.profile_search.results)
+        profile_results = self._enhance_traditional_with_semantic(
+            self.profile_search.results,
+            question_results + wiki_results
+        )
+        all_results.extend(profile_results)
 
-        # ForumSearch (traditional)
+        # ForumSearch (traditional) - enhance with semantic similarity
         self.forum_search.run(slice(0, 100))
-        all_results.extend(self.forum_search.results)
+        forum_results = self._enhance_traditional_with_semantic(
+            self.forum_search.results,
+            question_results + wiki_results
+        )
+        all_results.extend(forum_results)
 
         return all_results
 
@@ -523,11 +542,40 @@ class UnifiedRRFSearch(SumoSearch):
         else:
             return all_results[key:key+1]
 
+    def _diversify_results(self, results, max_per_type=3):
+        """Diversify results to ensure mix of different content types."""
+        if not results:
+            return results
+
+        type_counts = {}
+        diversified = []
+
+        # Sort by score first to prioritize best results
+        sorted_results = sorted(results, key=lambda x: x.get('score', 0), reverse=True)
+
+        for result in sorted_results:
+            result_type = result.get('type')
+            current_count = type_counts.get(result_type, 0)
+
+            if current_count < max_per_type:
+                diversified.append(result)
+                type_counts[result_type] = current_count + 1
+
+        # If we have fewer results than requested, fill with remaining high-scoring results
+        if len(diversified) < len(sorted_results):
+            remaining_results = [r for r in sorted_results if r not in diversified]
+            diversified.extend(remaining_results[:max_per_type * 2])  # Allow some overflow
+
+        return diversified
+
     def _run_rrf_search(self, key: int | slice) -> Self:
         """Run RRF search by executing individual RRF queries and combining results."""
         all_results = self._gather_individual_search_results()
 
         all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
+
+        # Apply result diversification
+        all_results = self._diversify_results(all_results)
 
         if self.min_score > 0:
             all_results = [r for r in all_results if r.get('score', 0) >= self.min_score]
@@ -595,6 +643,31 @@ class UnifiedRRFSearch(SumoSearch):
         else:
             return {}
 
+    def _enhance_traditional_with_semantic(self, traditional_results, semantic_results):
+        """Boost traditional results that also appear in semantic results."""
+        if not semantic_results:
+            return traditional_results
 
-# Alias for backward compatibility
-UnifiedSearch = UnifiedRRFSearch
+        # Extract titles from semantic results for comparison
+        semantic_titles = {r.get('title', '').lower() for r in semantic_results}
+
+        enhanced_results = []
+        for result in traditional_results:
+            enhanced_result = result.copy()
+            title_lower = result.get('title', '').lower()
+
+            # Check for semantic similarity (simple substring matching for now)
+            semantic_boost = 1.0
+            for sem_title in semantic_titles:
+                if sem_title and title_lower:
+                    # Simple similarity check - can be enhanced with better similarity algorithms
+                    if sem_title in title_lower or title_lower in sem_title:
+                        semantic_boost = 1.3  # 30% boost for semantic matches
+                        break
+
+            # Apply the boost to the score
+            original_score = result.get('score', 0)
+            enhanced_result['score'] = original_score * semantic_boost
+            enhanced_results.append(enhanced_result)
+
+        return enhanced_results
