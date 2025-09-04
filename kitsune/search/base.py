@@ -485,9 +485,12 @@ class SumoSearch(SumoSearchInterface):
         """Build RRF hybrid query combining traditional and semantic search with quality filtering."""
         from kitsune.search.search import RRFQuery
 
+        # Get dynamic RRF parameters based on query
+        rrf_params = self.get_dynamic_rrf_params()
+        rrf_window_size = rrf_params["window_size"]
+        rrf_rank_constant = rrf_params["rank_constant"]
+
         # Get search quality settings with defaults
-        rrf_window_size = getattr(settings, 'SEARCH_RRF_WINDOW_SIZE', 50)
-        rrf_rank_constant = getattr(settings, 'SEARCH_RRF_RANK_CONSTANT', 60)
         strict_relevance = getattr(settings, 'SEARCH_STRICT_RELEVANCE', True)
         require_text_match = getattr(settings, 'SEARCH_REQUIRE_TEXT_MATCH', True)
 
@@ -670,6 +673,140 @@ class SumoSearch(SumoSearchInterface):
             self.results = [self.make_result(hit) for hit in self.hits]
 
         return self
+
+    def detect_query_intent(self):
+        """Detect if query is navigational, informational, or transactional."""
+        if not self.query or not self.query.strip():
+            return "unknown"
+
+        query_lower = self.query.lower().strip()
+        terms = query_lower.split()
+
+        # Navigational queries (looking for specific pages/features)
+        navigational_keywords = [
+            'download', 'install', 'update', 'settings', 'preferences',
+            'menu', 'button', 'tab', 'page', 'window', 'toolbar',
+            'extension', 'addon', 'plugin', 'theme'
+        ]
+
+        # Informational queries (how-to, why, what questions)
+        informational_keywords = [
+            'how', 'why', 'what', 'when', 'where', 'which', 'who',
+            'guide', 'tutorial', 'help', 'support', 'documentation',
+            'manual', 'instructions', 'steps', 'process'
+        ]
+
+        # Transactional queries (problem-solving)
+        transactional_keywords = [
+            'fix', 'problem', 'issue', 'error', 'crash', 'slow',
+            'not working', 'broken', 'won\'t', 'can\'t', 'failed',
+            'troubleshoot', 'solution', 'resolve'
+        ]
+
+        # Check for informational intent first (higher priority)
+        if any(keyword in query_lower for keyword in informational_keywords):
+            return "informational"
+
+        # Check for navigational intent
+        if any(keyword in query_lower for keyword in navigational_keywords):
+            return "navigational"
+
+        # Check for transactional intent
+        if any(keyword in query_lower for keyword in transactional_keywords):
+            return "transactional"
+
+        # Default based on query length
+        if len(terms) <= 2:
+            return "navigational"  # Short queries likely navigational
+        elif len(terms) <= 4:
+            return "informational"  # Medium queries likely informational
+        else:
+            return "transactional"  # Long queries likely transactional
+
+    def get_enhanced_fields(self):
+        """Return enhanced field configuration based on query intent."""
+        intent = self.detect_query_intent()
+
+        # Base field configurations with enhanced boosting
+        base_config = {
+            "navigational": {
+                "title_boost": 25,      # Highest for finding specific pages
+                "keywords_boost": 15,  # Keywords very important for navigation
+                "summary_boost": 8,    # Summary helps with navigation
+                "content_boost": 1,    # Content less important for navigation
+            },
+            "informational": {
+                "title_boost": 20,     # Still high for informational content
+                "keywords_boost": 12, # Keywords important
+                "summary_boost": 10,  # Summary very important for info
+                "content_boost": 3,   # Content more important for info
+            },
+            "transactional": {
+                "title_boost": 18,     # Moderate for problem-solving
+                "keywords_boost": 10, # Keywords help with solutions
+                "summary_boost": 12,  # Summary often contains solutions
+                "content_boost": 5,   # Content most important for solutions
+            }
+        }
+
+        return base_config.get(intent, base_config["informational"])
+
+    def get_dynamic_rrf_params(self):
+        """Tune RRF parameters based on query characteristics."""
+        if not self.query:
+            return {"window_size": 50, "rank_constant": 60}
+
+        terms = self.query.strip().split()
+        intent = self.detect_query_intent()
+        query_lower = self.query.lower()
+
+        # Base parameters
+        params = {"window_size": 50, "rank_constant": 60}
+
+        # Analyze query characteristics for long queries
+        is_conversational = any(word in query_lower for word in [
+            'how', 'why', 'what', 'when', 'where', 'which', 'who', 'can', 'could',
+            'should', 'would', 'do', 'does', 'is', 'are', 'explain', 'help', 'guide'
+        ])
+
+        is_technical = any(word in query_lower for word in [
+            'error', 'exception', 'crash', 'bug', 'fix', 'debug', 'code', 'script',
+            'function', 'method', 'api', 'config', 'setting', 'parameter'
+        ])
+
+        # Adjust based on query length and characteristics
+        if len(terms) == 1:
+            # Single term - favor semantic more for broader matching
+            params.update({"window_size": 75, "rank_constant": 50})
+        elif len(terms) == 2:
+            # Two terms - balanced approach
+            params.update({"window_size": 60, "rank_constant": 55})
+        elif len(terms) <= 4:
+            # Short query - moderate semantic preference
+            params.update({"window_size": 50, "rank_constant": 60})
+        # Long query - nuanced approach based on query type
+        elif is_conversational and not is_technical:
+            # Conversational long queries (sentences) - favor semantic
+            params.update({"window_size": 60, "rank_constant": 50})
+        elif is_technical:
+            # Technical long queries - favor traditional precision
+            params.update({"window_size": 40, "rank_constant": 75})
+        else:
+            # Neutral long queries - balanced approach
+            params.update({"window_size": 45, "rank_constant": 65})
+
+        # Adjust based on intent
+        if intent == "navigational":
+            # Navigation needs precision - favor traditional
+            params["rank_constant"] = min(params["rank_constant"] + 10, 80)
+        elif intent == "informational":
+            # Information queries benefit from semantic understanding
+            params["rank_constant"] = max(params["rank_constant"] - 5, 40)
+        elif intent == "transactional":
+            # Problem-solving needs both precision and semantic context
+            params["window_size"] = min(params["window_size"] + 10, 80)
+
+        return params
 
 
 class SumoSearchPaginator(DjPaginator):
