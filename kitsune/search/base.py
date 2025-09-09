@@ -2,9 +2,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from dataclasses import field as dfield
 from datetime import datetime
+from enum import Enum
 from typing import Self, overload
 
+from dateutil import parser
 from django.conf import settings
+from django.core.cache import cache
 from django.core.paginator import EmptyPage, PageNotAnInteger
 from django.core.paginator import Paginator as DjPaginator
 from django.utils import timezone
@@ -32,6 +35,186 @@ from kitsune.search.parser.operators import (
     SpaceOperator,
 )
 from kitsune.search.parser.tokens import ExactToken, RangeToken, TermToken
+
+
+class QueryStrategy(Enum):
+    """Query strategies for different types of search queries."""
+
+    HYBRID_RELAXED = "hybrid_relaxed"      # Short queries, conversational - favor semantic
+    HYBRID_BALANCED = "hybrid_balanced"    # Medium queries, general - balanced approach
+    HYBRID_STRICT = "hybrid_strict"        # Technical queries - favor precision
+    ADVANCED_STRUCTURED = "advanced"       # Field operators, complex syntax - structured search
+    TRADITIONAL_FALLBACK = "traditional"   # Error recovery - traditional search
+
+
+class QueryIntent(Enum):
+    """Detected intent of the search query."""
+
+    NAVIGATIONAL = "navigational"  # Looking for specific pages/features
+    INFORMATIONAL = "informational"  # How-to questions, explanations
+    TRANSACTIONAL = "transactional"  # Problem-solving, troubleshooting
+    UNKNOWN = "unknown"  # Cannot determine intent
+
+
+class QueryClassifier:
+    """Classifies queries and determines optimal search strategy."""
+
+    @staticmethod
+    def classify_query(query: str) -> tuple[QueryStrategy, QueryIntent, float]:
+        """
+        Classify a query and return the optimal strategy, intent, and confidence score.
+
+        Returns:
+            tuple: (strategy, intent, confidence_score)
+        """
+        if not query or not query.strip():
+            return QueryStrategy.TRADITIONAL_FALLBACK, QueryIntent.UNKNOWN, 1.0
+
+        query_lower = query.lower().strip()
+        terms = query_lower.split()
+
+        # Detect advanced syntax first
+        if QueryClassifier._has_advanced_syntax(query):
+            return QueryStrategy.ADVANCED_STRUCTURED, QueryClassifier._detect_intent(query), 0.95
+
+        # Classify based on query characteristics
+        intent = QueryClassifier._detect_intent(query)
+        strategy = QueryClassifier._select_strategy(query, terms, intent)
+
+        # Calculate confidence based on classification factors
+        confidence = QueryClassifier._calculate_confidence(query, terms, intent)
+
+        return strategy, intent, confidence
+
+    @staticmethod
+    def _has_advanced_syntax(query: str) -> bool:
+        """Check if query uses advanced search syntax."""
+        # Field operators
+        if ":" in query:
+            return True
+
+        # Quoted strings
+        if '"' in query:
+            return True
+
+        # Try parsing to detect advanced operators
+        try:
+            parsed = Parser(query)
+            return QueryClassifier._has_advanced_tokens(parsed.parsed)
+        except ParseException:
+            return False
+
+    @staticmethod
+    def _has_advanced_tokens(token) -> bool:
+        """Check if parsed tokens contain advanced operators."""
+        if isinstance(token, FieldOperator | AndOperator | OrOperator | NotOperator | RangeToken | ExactToken):
+            return True
+        if isinstance(token, SpaceOperator):
+            return any(QueryClassifier._has_advanced_tokens(arg) for arg in token.arguments)
+        return False
+
+    @staticmethod
+    def _detect_intent(query: str) -> QueryIntent:
+        """Detect the intent of the query."""
+        query_lower = query.lower()
+
+        # Informational keywords (highest priority)
+        informational_keywords = [
+            'how', 'why', 'what', 'when', 'where', 'which', 'who',
+            'guide', 'tutorial', 'help', 'support', 'documentation',
+            'manual', 'instructions', 'steps', 'process', 'explain'
+        ]
+        if any(keyword in query_lower for keyword in informational_keywords):
+            return QueryIntent.INFORMATIONAL
+
+        # Navigational keywords
+        navigational_keywords = [
+            'download', 'install', 'update', 'settings', 'preferences',
+            'menu', 'button', 'tab', 'page', 'window', 'toolbar',
+            'extension', 'addon', 'plugin', 'theme', 'login', 'account'
+        ]
+        if any(keyword in query_lower for keyword in navigational_keywords):
+            return QueryIntent.NAVIGATIONAL
+
+        # Transactional keywords
+        transactional_keywords = [
+            'fix', 'problem', 'issue', 'error', 'crash', 'slow',
+            'not working', 'broken', 'won\'t', 'can\'t', 'failed',
+            'troubleshoot', 'solution', 'resolve', 'repair'
+        ]
+        if any(keyword in query_lower for keyword in transactional_keywords):
+            return QueryIntent.TRANSACTIONAL
+
+        # Default based on query length
+        term_count = len(query.split())
+        if term_count <= 2:
+            return QueryIntent.NAVIGATIONAL  # Short queries likely navigational
+        elif term_count <= 4:
+            return QueryIntent.INFORMATIONAL  # Medium queries likely informational
+        else:
+            return QueryIntent.TRANSACTIONAL  # Long queries likely transactional
+
+    @staticmethod
+    def _select_strategy(query: str, terms: list[str], intent: QueryIntent) -> QueryStrategy:
+        """Select the optimal search strategy based on query characteristics."""
+        term_count = len(terms)
+
+        # Single terms - relaxed hybrid (favor semantic discovery)
+        if term_count == 1:
+            return QueryStrategy.HYBRID_RELAXED
+
+        # Short queries - balanced hybrid
+        elif term_count <= 3:
+            return QueryStrategy.HYBRID_BALANCED
+
+        # Longer queries - depends on intent and characteristics
+        else:
+            # Technical queries need precision
+            if QueryClassifier._is_technical_query(query):
+                return QueryStrategy.HYBRID_STRICT
+
+            # Conversational queries can be more relaxed
+            if intent == QueryIntent.INFORMATIONAL:
+                return QueryStrategy.HYBRID_RELAXED
+
+            # Transactional queries need balance
+            if intent == QueryIntent.TRANSACTIONAL:
+                return QueryStrategy.HYBRID_BALANCED
+
+            # Default to balanced for longer queries
+            return QueryStrategy.HYBRID_BALANCED
+
+    @staticmethod
+    def _is_technical_query(query: str) -> bool:
+        """Check if query appears to be technical."""
+        technical_keywords = [
+            'error', 'exception', 'crash', 'bug', 'code', 'script',
+            'function', 'method', 'api', 'config', 'parameter', 'variable',
+            'database', 'server', 'connection', 'timeout', 'memory'
+        ]
+        return any(keyword in query.lower() for keyword in technical_keywords)
+
+    @staticmethod
+    def _calculate_confidence(query: str, terms: list[str], intent: QueryIntent) -> float:
+        """Calculate confidence score for the classification."""
+        confidence = 0.5  # Base confidence
+
+        # Higher confidence for clear intent signals
+        if intent != QueryIntent.UNKNOWN:
+            confidence += 0.2
+
+        # Higher confidence for medium-length queries
+        term_count = len(terms)
+        if 2 <= term_count <= 4:
+            confidence += 0.15
+        elif term_count == 1:
+            confidence += 0.1
+
+        # Lower confidence for very long queries
+        if term_count > 6:
+            confidence -= 0.1
+
+        return min(max(confidence, 0.1), 1.0)
 
 
 class SumoDocument(DSLDocument):
@@ -311,13 +494,11 @@ class SumoSearchInterface(ABC):
 
 
 @dataclass
-class SumoSearch(SumoSearchInterface):
-    """Base class for search classes.
+class BaseHybridSearch(SumoSearchInterface):
+    """Base class for hybrid search implementations.
 
-    Implements the run() function, which will perform the search.
-
-    Child classes should define values for the various abstract properties this
-    class inherits, relevant to the documents the child class is searching over.
+    Provides unified query strategy selection and smart filtering logic.
+    Child classes should implement the abstract methods from SumoSearchInterface.
     """
 
     total: int = dfield(default=0, init=False)
@@ -328,6 +509,16 @@ class SumoSearch(SumoSearchInterface):
     query: str = ""
     default_operator: str = "AND"
     parse_query: bool = dfield(default=True, init=False)
+
+    # Strategy and intent detection results
+    _query_strategy: QueryStrategy | None = dfield(default=None, init=False)
+    _query_intent: QueryIntent | None = dfield(default=None, init=False)
+    _strategy_confidence: float = dfield(default=0.0, init=False)
+
+    def __post_init__(self):
+        """Initialize query strategy after dataclass initialization."""
+        if self.query:
+            self._query_strategy, self._query_intent, self._strategy_confidence = QueryClassifier.classify_query(self.query)
 
     def __len__(self):
         return self.total
@@ -349,32 +540,140 @@ class SumoSearch(SumoSearchInterface):
             return self.results[0]
         return self.results
 
-    def build_query(self):
-        """Build a query to search over a specific set of documents."""
-        parsed = None
+    def get_query_strategy(self) -> QueryStrategy:
+        """Get the detected query strategy."""
+        if self._query_strategy is None and self.query:
+            self._query_strategy, self._query_intent, self._strategy_confidence = QueryClassifier.classify_query(self.query)
+        return self._query_strategy or QueryStrategy.TRADITIONAL_FALLBACK
 
-        if self.parse_query:
-            try:
-                parsed = Parser(self.query)
-            except ParseException:
-                pass
+    def get_query_intent(self) -> QueryIntent:
+        """Get the detected query intent."""
+        if self._query_intent is None and self.query:
+            self._query_strategy, self._query_intent, self._strategy_confidence = QueryClassifier.classify_query(self.query)
+        return self._query_intent or QueryIntent.UNKNOWN
 
-        if not parsed:
-            parsed = TermToken(self.query)
+    def get_strategy_confidence(self) -> float:
+        """Get the confidence score for the strategy classification."""
+        if self._strategy_confidence == 0.0 and self.query:
+            self._query_strategy, self._query_intent, self._strategy_confidence = QueryClassifier.classify_query(self.query)
+        return self._strategy_confidence
 
-        return parsed.elastic_query(
-            {
-                "fields": self.get_fields(),
-                "settings": self.get_settings(),
-            }
+    def should_require_text_match(self) -> bool:
+        """Determine if semantic results should be filtered by lexical matches."""
+        if not self.query:
+            return True
+
+        strategy = self.get_query_strategy()
+        intent = self.get_query_intent()
+        confidence = self.get_strategy_confidence()
+
+        # Never require text match for advanced structured queries
+        if strategy == QueryStrategy.ADVANCED_STRUCTURED:
+            return False
+
+        # Don't require text match for high-confidence short queries
+        if confidence > 0.8 and len(self.query.split()) <= 2:
+            return False
+
+        # Don't require text match for informational queries with good confidence
+        if intent == QueryIntent.INFORMATIONAL and confidence > 0.7:
+            return False
+
+        # Check if we have sufficient lexical results
+        lexical_results = self._estimate_lexical_results()
+        if lexical_results < 3:
+            # If lexical search returns few results, allow semantic to help
+            return False
+
+        # Default: require text match for quality control
+        return True
+
+    def _estimate_lexical_results(self) -> int:
+        """Estimate the number of lexical results for this query."""
+        # This is a simplified estimation - in practice, you might do a quick count query
+        # For now, we'll use heuristics based on query characteristics
+        terms = self.query.strip().split()
+        term_count = len(terms)
+
+        # Very short queries likely have more results
+        if term_count <= 2:
+            return 10
+
+        # Medium queries have moderate results
+        if term_count <= 4:
+            return 5
+
+        # Long queries likely have fewer results
+        return 2
+
+    def build_smart_hybrid_query(self):
+        """Build hybrid query using the detected strategy."""
+        strategy = self.get_query_strategy()
+
+        if strategy == QueryStrategy.ADVANCED_STRUCTURED:
+            # Use traditional query for advanced syntax
+            return self.build_traditional_query_with_filters(strict_matching=True)
+
+        elif strategy in (QueryStrategy.HYBRID_RELAXED, QueryStrategy.HYBRID_BALANCED, QueryStrategy.HYBRID_STRICT):
+            # Build hybrid RRF query with strategy-specific parameters
+            return self._build_adaptive_rrf_query(strategy)
+
+        else:
+            # Fallback to traditional
+            return self.build_traditional_query_with_filters(strict_matching=False)
+
+    def _build_adaptive_rrf_query(self, strategy: QueryStrategy):
+        """Build RRF query with parameters adapted to the strategy."""
+        from kitsune.search.search import RRFQuery
+
+        # Get base parameters
+        rrf_params = self.get_dynamic_rrf_params()
+        rrf_window_size = rrf_params["window_size"]
+        rrf_rank_constant = rrf_params["rank_constant"]
+
+        # Adjust parameters based on strategy
+        if strategy == QueryStrategy.HYBRID_RELAXED:
+            # Favor semantic more for relaxed queries
+            rrf_rank_constant = max(rrf_rank_constant - 10, 40)
+            rrf_window_size = min(rrf_window_size + 20, 100)
+        elif strategy == QueryStrategy.HYBRID_STRICT:
+            # Favor traditional more for strict queries
+            rrf_rank_constant = min(rrf_rank_constant + 15, 90)
+            rrf_window_size = max(rrf_window_size - 10, 30)
+
+        # Build queries with smart filtering
+        require_text_match = self.should_require_text_match()
+
+        traditional_query = self.build_traditional_query_with_filters(
+            strict_matching=(strategy == QueryStrategy.HYBRID_STRICT)
         )
 
-    def build_traditional_query_with_filters(self, strict_matching=False):
-        """Build traditional query with filters applied.
+        if require_text_match:
+            semantic_base = self.build_semantic_query_with_filters()
+            semantic_query = DSLQ(
+                "bool",
+                must=semantic_base,
+                filter=traditional_query  # Require traditional match for semantic results
+            )
+        else:
+            semantic_query = self.build_semantic_query_with_filters()
 
-        Args:
-            strict_matching: If True, apply strict matching rules based on query length
-        """
+        rrf_query = {
+            "retriever": {
+                "rrf": {
+                    "retrievers": [
+                        {"standard": {"query": traditional_query.to_dict()}},
+                        {"standard": {"query": semantic_query.to_dict()}}
+                    ],
+                    "rank_window_size": rrf_window_size,
+                    "rank_constant": rrf_rank_constant
+                }
+            }
+        }
+        return RRFQuery(rrf_query)
+
+    def build_traditional_query_with_filters(self, strict_matching=False):
+        """Build traditional query with filters applied."""
         # Check if this query uses field operators that need query_string
         has_field_operators = ":" in self.query and (
             any(f"{field}:" in self.query for field in self.get_advanced_query_field_names()) or
@@ -404,13 +703,11 @@ class SumoSearch(SumoSearchInterface):
                 "settings": self.get_settings(),
             })
         else:
-            # Use strict matching based on query length
+            # Use strict matching based on query length and strategy
             query_terms = self.query.strip().split()
             term_count = len(query_terms)
 
-            # Check if this is a conversational query (starts with question words)
-            conversational_starters = ['how', 'why', 'what', 'when', 'where', 'who', 'which', 'can', 'could', 'should', 'would']
-            is_conversational = any(self.query.lower().startswith(word) for word in conversational_starters)
+            strategy = self.get_query_strategy()
 
             if term_count == 1:
                 # Single term - use normal parser-based matching
@@ -442,25 +739,39 @@ class SumoSearch(SumoSearchInterface):
                     minimum_should_match="50%",
                     flags="PHRASE"
                 )
-            # 5+ terms - adjust strictness based on query type
-            elif is_conversational:
-                # Conversational queries: be more lenient, don't require phrase matching
-                query = DSLQ(
-                    "simple_query_string",
-                    query=self.query,
-                    fields=self.get_fields(),
-                    minimum_should_match="30%",  # More lenient for conversational queries
-                    # No PHRASE flag - allow terms to match in any order
-                )
+            # 5+ terms - adjust strictness based on query type and strategy
             else:
-                # Technical queries: maintain stricter matching
-                query = DSLQ(
-                    "simple_query_string",
-                    query=self.query,
-                    fields=self.get_fields(),
-                    minimum_should_match="40%",  # Keep stricter for technical queries
-                    flags="PHRASE"  # Require phrase matching for technical precision
-                )
+                intent = self.get_query_intent()
+                is_conversational = intent == QueryIntent.INFORMATIONAL
+                is_technical = strategy == QueryStrategy.HYBRID_STRICT
+
+                if is_conversational and not is_technical:
+                    # Conversational queries: be more lenient
+                    query = DSLQ(
+                        "simple_query_string",
+                        query=self.query,
+                        fields=self.get_fields(),
+                        minimum_should_match="30%",
+                        # No PHRASE flag - allow terms to match in any order
+                    )
+                elif is_technical:
+                    # Technical queries: maintain stricter matching
+                    query = DSLQ(
+                        "simple_query_string",
+                        query=self.query,
+                        fields=self.get_fields(),
+                        minimum_should_match="40%",
+                        flags="PHRASE"  # Require phrase matching for technical precision
+                    )
+                else:
+                    # Balanced approach for other long queries
+                    query = DSLQ(
+                        "simple_query_string",
+                        query=self.query,
+                        fields=self.get_fields(),
+                        minimum_should_match="35%",
+                        flags="PHRASE"
+                    )
 
         return self._apply_filters_to_query(query)
 
@@ -481,114 +792,475 @@ class SumoSearch(SumoSearchInterface):
         # Apply base filters
         return self._apply_filters_to_query(combined_semantic)
 
-    def build_hybrid_rrf_query(self):
-        """Build RRF hybrid query combining traditional and semantic search with quality filtering."""
-        from kitsune.search.search import RRFQuery
-
-        # Get dynamic RRF parameters based on query
-        rrf_params = self.get_dynamic_rrf_params()
-        rrf_window_size = rrf_params["window_size"]
-        rrf_rank_constant = rrf_params["rank_constant"]
-
-        # Get search quality settings with defaults
-        strict_relevance = getattr(settings, 'SEARCH_STRICT_RELEVANCE', True)
-        require_text_match = getattr(settings, 'SEARCH_REQUIRE_TEXT_MATCH', True)
-
-        # Build traditional query with stricter matching if enabled
-        traditional_query = self.build_traditional_query_with_filters(strict_matching=strict_relevance)
-
-        # If require_text_match is enabled, only include semantic search for documents
-        # that also match the traditional search. This filters out nonsense queries.
-        if require_text_match:
-            semantic_base = self.build_semantic_query_with_filters()
-
-            # Wrap semantic query with traditional filter
-            semantic_query = DSLQ(
-                "bool",
-                must=semantic_base,
-                filter=traditional_query  # Require traditional match for semantic results
-            )
-        else:
-            semantic_query = self.build_semantic_query_with_filters()
-
-        rrf_query = {
-            "retriever": {
-                "rrf": {
-                    "retrievers": [
-                        {"standard": {"query": traditional_query.to_dict()}},
-                        {"standard": {"query": semantic_query.to_dict()}}
-                    ],
-                    "rank_window_size": rrf_window_size,
-                    "rank_constant": rrf_rank_constant
-                }
-            }
-        }
-        return RRFQuery(rrf_query)
+    def _apply_filters_to_query(self, query):
+        """Apply base filters to a query."""
+        if hasattr(self, 'get_base_filters'):
+            return DSLQ("bool", filter=self.get_base_filters(), must=query)
+        return query
 
     def get_semantic_fields(self):
         """Return list of semantic fields for this search. Override in subclasses."""
         return []
 
-    def _apply_filters_to_query(self, query):
-        """Apply base filters to a query. Override in subclasses for specific behavior."""
-        if hasattr(self, 'get_base_filters'):
-            return DSLQ("bool", filter=self.get_base_filters(), must=query)
-        return query
-
     def get_advanced_query_field_names(self):
-        """Return list of field names that can be used in advanced queries. Override in subclasses."""
+        """Return list of field names that can be used in advanced queries."""
         return []
 
-    def is_advanced_query(self, token=None):
-        """Check if query uses advanced search syntax."""
-        if token is None:
-            if not self.query or not self.query.strip():
-                return False
+    def get_dynamic_rrf_params(self):
+        """Tune RRF parameters based on query characteristics."""
+        if not self.query:
+            return {"window_size": 50, "rank_constant": 60}
 
-            # Quick check for field operators (field:value syntax)
-            if ":" in self.query:
-                # Check if it's a field operator by looking for known field prefixes
-                field_names = self.get_advanced_query_field_names()
-                for field in field_names:
+        terms = self.query.strip().split()
+        intent = self.get_query_intent()
+        strategy = self.get_query_strategy()
+
+        # Base parameters
+        params = {"window_size": 50, "rank_constant": 60}
+
+        # Analyze query characteristics
+        is_conversational = intent == QueryIntent.INFORMATIONAL
+        is_technical = strategy == QueryStrategy.HYBRID_STRICT
+
+        # Adjust based on query length and characteristics
+        if len(terms) == 1:
+            # Single term - favor semantic more for broader matching
+            params.update({"window_size": 75, "rank_constant": 50})
+        elif len(terms) == 2:
+            # Two terms - balanced approach
+            params.update({"window_size": 60, "rank_constant": 55})
+        elif len(terms) <= 4:
+            # Short query - moderate semantic preference
+            params.update({"window_size": 50, "rank_constant": 60})
+        # Long query - nuanced approach based on query type
+        elif is_conversational and not is_technical:
+            # Conversational long queries - favor semantic
+            params.update({"window_size": 60, "rank_constant": 50})
+        elif is_technical:
+            # Technical long queries - favor traditional precision
+            params.update({"window_size": 40, "rank_constant": 75})
+        else:
+            # Neutral long queries - balanced approach
+            params.update({"window_size": 45, "rank_constant": 65})
+
+        # Adjust based on intent
+        if intent == QueryIntent.NAVIGATIONAL:
+            # Navigation needs precision - favor traditional
+            params["rank_constant"] = min(params["rank_constant"] + 10, 80)
+        elif intent == QueryIntent.INFORMATIONAL:
+            # Information queries benefit from semantic understanding
+            params["rank_constant"] = max(params["rank_constant"] - 5, 40)
+        elif intent == QueryIntent.TRANSACTIONAL:
+            # Problem-solving needs both precision and semantic context
+            params["window_size"] = min(params["window_size"] + 10, 80)
+
+        return params
+
+
+    def get_enhanced_fields(self):
+        """Return enhanced field boosts based on query strategy and intent."""
+        strategy = self.get_query_strategy()
+        intent = self.get_query_intent()
+        confidence = self.get_strategy_confidence()
+
+        # Base boost values for all field types
+        base_boosts = {
+            "title_boost": 3.0,
+            "content_boost": 1.0,
+            "summary_boost": 1.5,
+            "keywords_boost": 2.5,  # Keywords are important for search
+        }
+
+        # Adjust boosts based on strategy
+        if strategy == QueryStrategy.HYBRID_RELAXED:
+            # Favor semantic - boost content and summary
+            base_boosts.update({
+                "title_boost": 2.5,
+                "content_boost": 1.2,
+                "summary_boost": 1.8,
+                "keywords_boost": 2.2,
+            })
+        elif strategy == QueryStrategy.HYBRID_BALANCED:
+            # Balanced approach
+            base_boosts.update({
+                "title_boost": 3.0,
+                "content_boost": 1.0,
+                "summary_boost": 1.5,
+                "keywords_boost": 2.5,
+            })
+        elif strategy == QueryStrategy.HYBRID_STRICT:
+            # Favor precision - boost title and keywords
+            base_boosts.update({
+                "title_boost": 3.5,
+                "content_boost": 1.3,
+                "summary_boost": 1.2,
+                "keywords_boost": 3.0,
+            })
+        elif strategy == QueryStrategy.ADVANCED_STRUCTURED:
+            # Structured queries - maintain original boosts
+            base_boosts.update({
+                "title_boost": 3.0,
+                "content_boost": 1.0,
+                "summary_boost": 1.5,
+                "keywords_boost": 2.5,
+            })
+
+        # Adjust based on intent
+        if intent == QueryIntent.NAVIGATIONAL:
+            # Navigation favors titles and keywords
+            base_boosts["title_boost"] *= 1.2
+            base_boosts["keywords_boost"] *= 1.1
+        elif intent == QueryIntent.INFORMATIONAL:
+            # Information queries favor content
+            base_boosts["content_boost"] *= 1.1
+            base_boosts["summary_boost"] *= 1.1
+        elif intent == QueryIntent.TRANSACTIONAL:
+            # Transactional queries need balanced precision
+            base_boosts["title_boost"] *= 1.1
+            base_boosts["keywords_boost"] *= 1.05
+            base_boosts["content_boost"] *= 1.05
+
+        # Scale boosts by confidence
+        if confidence > 0.8:
+            # High confidence - amplify boosts
+            for key in base_boosts:
+                base_boosts[key] *= 1.1
+        elif confidence < 0.6:
+            # Low confidence - reduce boosts to be more conservative
+            for key in base_boosts:
+                base_boosts[key] *= 0.9
+
+        return base_boosts
+
+
+    def _get_cache_key(self, key: int | slice) -> str:
+        """Generate a unique cache key for this search query and parameters."""
+        # Create a deterministic cache key based on search parameters
+        key_parts = [
+            self.__class__.__name__,
+            self.query or "",
+            str(self.locale) if hasattr(self, 'locale') else "",
+            str(getattr(self, 'product', None)),
+            str(key),
+            str(self.get_query_strategy().value),
+            str(self.get_query_intent().value),
+            str(self.should_require_text_match()),
+        ]
+
+        # Add any additional search-specific parameters
+        if hasattr(self, 'group_ids'):
+            key_parts.append(str(sorted(self.group_ids or [])))
+        if hasattr(self, 'thread_forum_id'):
+            key_parts.append(str(self.thread_forum_id))
+
+        cache_key = f"search:{':'.join(key_parts)}"
+        # Ensure cache key is not too long (Django cache key limit is 250 chars)
+        if len(cache_key) > 250:
+            cache_key = f"search:{hash(cache_key)}"
+
+        return cache_key
+
+    def _should_cache_results(self) -> bool:
+        """Determine if this search should be cached."""
+        # Don't cache if caching is disabled
+        if not getattr(settings, 'SEARCH_CACHE_ENABLED', True):
+            return False
+
+        # Don't cache advanced queries (they're less likely to be repeated)
+        if self.is_advanced_query():
+            return False
+
+        # Don't cache very short queries (likely typos or test queries)
+        if len(self.query.strip()) < 3:
+            return False
+
+        # Don't cache queries with very low confidence (likely to change)
+        if self.get_strategy_confidence() < 0.6:
+            return False
+
+        # Cache everything else
+        return True
+
+    def _cache_search_results(self, key: int | slice, results: list, total: int) -> None:
+        """Cache search results if caching is enabled."""
+        if not self._should_cache_results():
+            return
+
+        cache_key = self._get_cache_key(key)
+        cache_data = {
+            'results': results,
+            'total': total,
+            'timestamp': timezone.now().isoformat(),
+            'query': self.query,
+            'strategy': self.get_query_strategy().value,
+            'intent': self.get_query_intent().value,
+        }
+
+        # Cache for 15 minutes (configurable)
+        cache_timeout = getattr(settings, 'SEARCH_CACHE_TIMEOUT', 900)
+        cache.set(cache_key, cache_data, cache_timeout)
+
+    def _get_cached_results(self, key: int | slice) -> dict | None:
+        """Retrieve cached results if available and valid."""
+        if not self._should_cache_results():
+            return None
+
+        cache_key = self._get_cache_key(key)
+        cached_data = cache.get(cache_key)
+
+        if cached_data:
+            # Validate cache data structure
+            required_keys = ['results', 'total', 'timestamp', 'query']
+            if all(key in cached_data for key in required_keys):
+                # Check if cache is not too old (additional safety check)
+                cache_time = parser.parse(cached_data['timestamp'])
+                cache_age = (timezone.now() - cache_time).total_seconds()
+                max_age = getattr(settings, 'SEARCH_CACHE_MAX_AGE', 1800)  # 30 minutes
+
+                if cache_age < max_age:
+                    return cached_data
+
+                if cache_age < max_age:
+                    return cached_data
+
+        return None
+
+    def _track_search_metrics(self, execution_time: float, result_count: int, cache_hit: bool = False) -> None:
+        """Track search performance metrics for monitoring and analytics."""
+        if not getattr(settings, 'SEARCH_METRICS_ENABLED', True):
+            return
+
+        # Create metrics data
+        metrics_data = {
+            'timestamp': timezone.now().isoformat(),
+            'query': self.query,
+            'query_length': len(self.query) if self.query else 0,
+            'strategy': self.get_query_strategy().value,
+            'intent': self.get_query_intent().value,
+            'confidence': self.get_strategy_confidence(),
+            'execution_time': execution_time,
+            'result_count': result_count,
+            'cache_hit': cache_hit,
+            'is_advanced': self.is_advanced_query(),
+            'search_class': self.__class__.__name__,
+        }
+
+        # Store metrics in cache for batch processing (configurable)
+        metrics_key = f"search_metrics:{timezone.now().strftime('%Y%m%d%H')}"
+        existing_metrics = cache.get(metrics_key, [])
+        existing_metrics.append(metrics_data)
+
+        # Keep only recent metrics (last 100 per hour)
+        if len(existing_metrics) > 100:
+            existing_metrics = existing_metrics[-100:]
+
+        cache.set(metrics_key, existing_metrics, 3600)  # 1 hour
+
+    def get_search_metrics_summary(self) -> dict:
+        """Get a summary of recent search metrics for monitoring."""
+        metrics_key = f"search_metrics:{timezone.now().strftime('%Y%m%d%H')}"
+        recent_metrics = cache.get(metrics_key, [])
+
+        if not recent_metrics:
+            return {
+                'total_searches': 0,
+                'avg_execution_time': 0,
+                'cache_hit_rate': 0,
+                'strategy_distribution': {},
+                'intent_distribution': {},
+            }
+
+        total_searches = len(recent_metrics)
+        total_execution_time = sum(m['execution_time'] for m in recent_metrics)
+        cache_hits = sum(1 for m in recent_metrics if m['cache_hit'])
+
+        strategy_counts: dict[str, int] = {}
+        intent_counts: dict[str, int] = {}
+
+        for metric in recent_metrics:
+            strategy = metric['strategy']
+            intent = metric['intent']
+            strategy_counts[strategy] = strategy_counts.get(strategy, 0) + 1
+            intent_counts[intent] = intent_counts.get(intent, 0) + 1
+
+        return {
+            'total_searches': total_searches,
+            'avg_execution_time': total_execution_time / total_searches if total_searches > 0 else 0,
+            'cache_hit_rate': cache_hits / total_searches if total_searches > 0 else 0,
+            'strategy_distribution': strategy_counts,
+            'intent_distribution': intent_counts,
+        }
+
+    def _get_ab_test_variant(self) -> str:
+        """Determine which A/B test variant this search should use."""
+        if not getattr(settings, 'SEARCH_AB_TESTING_ENABLED', False):
+            return 'control'
+
+        # Simple A/B test based on query hash for consistency
+        query_hash = hash(self.query or "") % 100
+
+        # 50/50 split between control and test variants
+        if query_hash < 50:
+            return 'control'
+        else:
+            return 'test'
+
+    def _apply_ab_test_modifications(self, variant: str) -> None:
+        """Apply modifications based on A/B test variant."""
+        if variant == 'test':
+            # Test variant: More aggressive semantic search
+            # Reduce text match requirements for higher semantic benefit
+            pass  # Modifications would be applied here
+
+    def _track_ab_test_metrics(self, variant: str, execution_time: float, result_count: int) -> None:
+        """Track A/B test performance metrics."""
+        if not getattr(settings, 'SEARCH_AB_TESTING_ENABLED', False):
+            return
+
+        # Store A/B test data
+        ab_key = f"ab_test:{variant}:{timezone.now().strftime('%Y%m%d')}"
+        existing_data = cache.get(ab_key, [])
+        existing_data.append({
+            'timestamp': timezone.now().isoformat(),
+            'query': self.query,
+            'execution_time': execution_time,
+            'result_count': result_count,
+            'strategy': self.get_query_strategy().value,
+            'intent': self.get_query_intent().value,
+        })
+
+        # Keep only recent data (last 500 per day per variant)
+        if len(existing_data) > 500:
+            existing_data = existing_data[-500:]
+
+        cache.set(ab_key, existing_data, 86400)  # 24 hours
+
+    def get_ab_test_summary(self) -> dict:
+        """Get A/B test performance summary."""
+        if not getattr(settings, 'SEARCH_AB_TESTING_ENABLED', False):
+            return {'enabled': False}
+
+        control_key = f"ab_test:control:{timezone.now().strftime('%Y%m%d')}"
+        test_key = f"ab_test:test:{timezone.now().strftime('%Y%m%d')}"
+
+        control_data = cache.get(control_key, [])
+        test_data = cache.get(test_key, [])
+
+        def calculate_metrics(data):
+            if not data:
+                return {'count': 0, 'avg_time': 0, 'avg_results': 0}
+            return {
+                'count': len(data),
+                'avg_time': sum(d['execution_time'] for d in data) / len(data),
+                'avg_results': sum(d['result_count'] for d in data) / len(data),
+            }
+
+        return {
+            'enabled': True,
+            'control': calculate_metrics(control_data),
+            'test': calculate_metrics(test_data),
+        }
+
+    def is_advanced_query(self) -> bool:
+        """Determine if this is an advanced/structured query that needs special handling."""
+        if not self.query:
+            return False
+
+        strategy = self.get_query_strategy()
+
+        # Advanced structured queries are those with field operators or complex syntax
+        if strategy == QueryStrategy.ADVANCED_STRUCTURED:
+            return True
+
+        # Check for field operator syntax
+        if ":" in self.query:
+            # Look for field operators in the query
+            advanced_fields = self.get_advanced_query_field_names()
+            if advanced_fields:
+                for field in advanced_fields:
                     if f"{field}:" in self.query:
                         return True
 
-                # Also check for locale-aware field names (e.g., title.en-US:, content.fr:)
-                # Get all possible field combinations from get_fields()
-                if hasattr(self, 'get_fields'):
-                    search_fields = self.get_fields()
-                    for search_field in search_fields:
-                        # Extract base field name (remove boost like ^15)
-                        clean_field = search_field.split('^')[0]
-                        if f"{clean_field}:" in self.query:
-                            return True
+        # Check for other advanced syntax indicators
+        advanced_indicators = [
+            " AND ", " OR ", " NOT ",  # Boolean operators
+            '"',  # Phrase queries
+            "(", ")",  # Grouping
+            "~", "^",  # Fuzzy/proximity operators
+        ]
 
-            # Check for quoted strings (exact match syntax)
-            if '"' in self.query:
+        for indicator in advanced_indicators:
+            if indicator in self.query:
                 return True
 
-            try:
-                parsed = Parser(self.query)
-                return self.is_advanced_query(parsed.parsed)
-            except ParseException:
-                return False
-
-        # Advanced operators and tokens
-
-        if isinstance(
-            token, FieldOperator | AndOperator | OrOperator | NotOperator | RangeToken | ExactToken
-        ):
-            return True
-
-        # SpaceOperator may contain advanced tokens
-        if isinstance(token, SpaceOperator):
-            return any(self.is_advanced_query(arg) for arg in token.arguments)
-
         return False
+
+
+@dataclass
+class SumoSearch(BaseHybridSearch):
+    """Base class for search classes.
+
+    Provides default implementations for core search functionality.
+    Child classes should override specific methods for their document types.
+    """
+
+    # Note: All common functionality is inherited from BaseHybridSearch
+    # This class provides default implementations for abstract methods
+
+    def get_index(self):
+        """Default index - should be overridden by child classes."""
+        return "*"
+
+    def get_fields(self):
+        """Default fields - should be overridden by child classes."""
+        return ["*"]
+
+    def get_highlight_fields_options(self):
+        """Default highlight options - should be overridden by child classes."""
+        return []
+
+    def get_filter(self):
+        """Default filter - uses smart hybrid query."""
+        return self.build_smart_hybrid_query()
+
+    def build_query(self):
+        """Default query builder - uses smart hybrid approach."""
+        return self.build_smart_hybrid_query()
+
+    def make_result(self, hit):
+        """Default result maker - should be overridden by child classes."""
+        return {
+            "type": "document",
+            "title": getattr(hit, "title", "Unknown"),
+            "url": "#",
+            "score": getattr(hit.meta, "score", 0),
+            "search_summary": getattr(hit, "content", "")[:200],
+        }
 
     def run(self, key: int | slice = slice(0, settings.SEARCH_RESULTS_PER_PAGE)) -> Self:
         """Perform search, placing the results in `self.results`, and the total
         number of results (across all pages) in `self.total`. Chainable."""
+
+        start_time = timezone.now()
+
+        # Determine A/B test variant
+        ab_variant = self._get_ab_test_variant()
+        self._apply_ab_test_modifications(ab_variant)
+
+        # Check for cached results first
+        cached_results = self._get_cached_results(key)
+        if cached_results:
+            self.results = cached_results['results']
+            self.total = cached_results['total']
+            self.hits = []
+            self.last_key = key
+
+            # Track cache hit metrics
+            execution_time = (timezone.now() - start_time).total_seconds()
+            self._track_search_metrics(execution_time, len(self.results), cache_hit=True)
+            self._track_ab_test_metrics(ab_variant, execution_time, len(self.results))
+
+            return self
 
         # Import here to avoid circular dependency
         from kitsune.search.search import RRFQuery
@@ -625,8 +1297,6 @@ class SumoSearch(SumoSearchInterface):
                 raise e
 
             # Process RRF results
-            # With require_text_match enabled, nonsense queries are already filtered out
-            # since they have 0 traditional matches
             self.hits = []
             for hit in result["hits"]["hits"]:
                 # Convert raw hit to AttrDict for compatibility
@@ -639,9 +1309,8 @@ class SumoSearch(SumoSearchInterface):
                 self.hits.append(attr_hit)
 
             self.last_key = key
-            # Use the count of filtered hits as total (not the raw ES total)
-            # This prevents pagination issues with filtered results
-            self.total = len(self.hits)
+            # Get the actual total count from Elasticsearch response
+            self.total = result["hits"]["total"]["value"]
             self.results = [self.make_result(hit) for hit in self.hits]
         else:
             # Traditional DSL search flow
@@ -672,141 +1341,15 @@ class SumoSearch(SumoSearchInterface):
             self.total = self.hits.total.value  # type: ignore
             self.results = [self.make_result(hit) for hit in self.hits]
 
+        # Cache the results for future use
+        self._cache_search_results(key, self.results, self.total)
+
+        # Track search performance metrics
+        execution_time = (timezone.now() - start_time).total_seconds()
+        self._track_search_metrics(execution_time, len(self.results), cache_hit=False)
+        self._track_ab_test_metrics(ab_variant, execution_time, len(self.results))
+
         return self
-
-    def detect_query_intent(self):
-        """Detect if query is navigational, informational, or transactional."""
-        if not self.query or not self.query.strip():
-            return "unknown"
-
-        query_lower = self.query.lower().strip()
-        terms = query_lower.split()
-
-        # Navigational queries (looking for specific pages/features)
-        navigational_keywords = [
-            'download', 'install', 'update', 'settings', 'preferences',
-            'menu', 'button', 'tab', 'page', 'window', 'toolbar',
-            'extension', 'addon', 'plugin', 'theme'
-        ]
-
-        # Informational queries (how-to, why, what questions)
-        informational_keywords = [
-            'how', 'why', 'what', 'when', 'where', 'which', 'who',
-            'guide', 'tutorial', 'help', 'support', 'documentation',
-            'manual', 'instructions', 'steps', 'process'
-        ]
-
-        # Transactional queries (problem-solving)
-        transactional_keywords = [
-            'fix', 'problem', 'issue', 'error', 'crash', 'slow',
-            'not working', 'broken', 'won\'t', 'can\'t', 'failed',
-            'troubleshoot', 'solution', 'resolve'
-        ]
-
-        # Check for informational intent first (higher priority)
-        if any(keyword in query_lower for keyword in informational_keywords):
-            return "informational"
-
-        # Check for navigational intent
-        if any(keyword in query_lower for keyword in navigational_keywords):
-            return "navigational"
-
-        # Check for transactional intent
-        if any(keyword in query_lower for keyword in transactional_keywords):
-            return "transactional"
-
-        # Default based on query length
-        if len(terms) <= 2:
-            return "navigational"  # Short queries likely navigational
-        elif len(terms) <= 4:
-            return "informational"  # Medium queries likely informational
-        else:
-            return "transactional"  # Long queries likely transactional
-
-    def get_enhanced_fields(self):
-        """Return enhanced field configuration based on query intent."""
-        intent = self.detect_query_intent()
-
-        # Base field configurations with enhanced boosting
-        base_config = {
-            "navigational": {
-                "title_boost": 25,      # Highest for finding specific pages
-                "keywords_boost": 15,  # Keywords very important for navigation
-                "summary_boost": 8,    # Summary helps with navigation
-                "content_boost": 1,    # Content less important for navigation
-            },
-            "informational": {
-                "title_boost": 20,     # Still high for informational content
-                "keywords_boost": 12, # Keywords important
-                "summary_boost": 10,  # Summary very important for info
-                "content_boost": 3,   # Content more important for info
-            },
-            "transactional": {
-                "title_boost": 18,     # Moderate for problem-solving
-                "keywords_boost": 10, # Keywords help with solutions
-                "summary_boost": 12,  # Summary often contains solutions
-                "content_boost": 5,   # Content most important for solutions
-            }
-        }
-
-        return base_config.get(intent, base_config["informational"])
-
-    def get_dynamic_rrf_params(self):
-        """Tune RRF parameters based on query characteristics."""
-        if not self.query:
-            return {"window_size": 50, "rank_constant": 60}
-
-        terms = self.query.strip().split()
-        intent = self.detect_query_intent()
-        query_lower = self.query.lower()
-
-        # Base parameters
-        params = {"window_size": 50, "rank_constant": 60}
-
-        # Analyze query characteristics for long queries
-        is_conversational = any(word in query_lower for word in [
-            'how', 'why', 'what', 'when', 'where', 'which', 'who', 'can', 'could',
-            'should', 'would', 'do', 'does', 'is', 'are', 'explain', 'help', 'guide'
-        ])
-
-        is_technical = any(word in query_lower for word in [
-            'error', 'exception', 'crash', 'bug', 'fix', 'debug', 'code', 'script',
-            'function', 'method', 'api', 'config', 'setting', 'parameter'
-        ])
-
-        # Adjust based on query length and characteristics
-        if len(terms) == 1:
-            # Single term - favor semantic more for broader matching
-            params.update({"window_size": 75, "rank_constant": 50})
-        elif len(terms) == 2:
-            # Two terms - balanced approach
-            params.update({"window_size": 60, "rank_constant": 55})
-        elif len(terms) <= 4:
-            # Short query - moderate semantic preference
-            params.update({"window_size": 50, "rank_constant": 60})
-        # Long query - nuanced approach based on query type
-        elif is_conversational and not is_technical:
-            # Conversational long queries (sentences) - favor semantic
-            params.update({"window_size": 60, "rank_constant": 50})
-        elif is_technical:
-            # Technical long queries - favor traditional precision
-            params.update({"window_size": 40, "rank_constant": 75})
-        else:
-            # Neutral long queries - balanced approach
-            params.update({"window_size": 45, "rank_constant": 65})
-
-        # Adjust based on intent
-        if intent == "navigational":
-            # Navigation needs precision - favor traditional
-            params["rank_constant"] = min(params["rank_constant"] + 10, 80)
-        elif intent == "informational":
-            # Information queries benefit from semantic understanding
-            params["rank_constant"] = max(params["rank_constant"] - 5, 40)
-        elif intent == "transactional":
-            # Problem-solving needs both precision and semantic context
-            params["window_size"] = min(params["window_size"] + 10, 80)
-
-        return params
 
 
 class SumoSearchPaginator(DjPaginator):
@@ -823,10 +1366,15 @@ class SumoSearchPaginator(DjPaginator):
     Because of this, the `orphans` argument won't work.
     """
 
+    def __init__(self, object_list, per_page, orphans=0, allow_empty_first_page=True):
+        super().__init__(object_list, per_page, orphans, allow_empty_first_page)
+        # Store the actual total count from the search object
+        self._actual_count = getattr(object_list, 'total', len(object_list)) if hasattr(object_list, 'total') else len(object_list)
+
     @property
     def count(self):
-        """Return the total number of objects, updating dynamically after search runs."""
-        return len(self.object_list)
+        """Return the total number of objects from the search results."""
+        return self._actual_count
 
     def pre_validate_number(self, number):
         """
