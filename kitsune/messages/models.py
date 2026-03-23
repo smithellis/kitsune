@@ -7,13 +7,7 @@ from kitsune.sumo.models import ModelBase
 
 ALLOWED_MESSAGE_ATTRIBUTES = {
     "a": ["href", "title", "rel", "data-mozilla-ui-reset", "data-mozilla-ui-preferences"],
-    "div": ["id", "data-for", "title", "data-target", "data-modal"],
-    "h1": ["id"],
-    "h2": ["id"],
-    "h3": ["id"],
-    "h4": ["id"],
-    "h5": ["id"],
-    "h6": ["id"],
+    "div": ["data-for", "title"],
     "span": ["data-for"],
     "img": ["src", "data-original-src", "alt", "title", "height", "width"],
     "video": [

@@ -2,7 +2,7 @@
 <h3 class="sumo-page-intro">{{ _('Content:') }}</h3>
 <div class="content">
   <h2 class="sumo-page-subheading">{{ object.content_object }}</h2>
-  {{ object.content_object.bio|wiki_to_html(nofollow=True) }}
+  {{ object.content_object.bio|wiki_to_safe_html(nofollow=True) }}
 </div>
 <h3 class="sumo-page-intro">{{ _('Flagged:') }}</h3>
 <p class="flagged">

@@ -533,7 +533,7 @@
                   {% if question.metadata.plugins %}
                   <h3 class="sumo-card-heading">{{ plugins_label }}</h3>
                   <p><span class="plugins">
-                    {{ question.metadata.plugins|wiki_to_html }}
+                    {{ question.metadata.plugins|wiki_to_html_questions }}
                   </span></p>
                   {% endif %}
                   {{ troubleshooting_info(question) }}
