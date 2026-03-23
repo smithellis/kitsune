@@ -84,7 +84,7 @@
 
                   <span>{{ _("Date:") }} {{ question.created.strftime('%b %d, %Y') }}</span>
 
-                  <span class="my-questions--status-badge my-questions--status-badge--{{ status_class }}">{{ status_label }}</span>
+                  <span class="status-label status-label--{{ status_class }}">{{ status_label }}</span>
 
                   {% if not is_ticket and question.num_answers %}
                     <span>

@@ -129,6 +129,18 @@
             </span>
           </li>
           {% endif %}
+
+          <li class="border-left-md">
+            {% if question.is_solved %}
+              <span class="status-label status-label--resolved">{{ _('Solved') }}</span>
+            {% elif question.is_locked %}
+              <span class="status-label status-label--neutral">{{ _('Locked') }}</span>
+            {% elif question.is_archived %}
+              <span class="status-label status-label--neutral">{{ _('Archived') }}</span>
+            {% else %}
+              <span class="status-label status-label--open">{{ _('Open') }}</span>
+            {% endif %}
+          </li>
         </ul>
 
         {% if question.last_answer %}
