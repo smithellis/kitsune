@@ -45,7 +45,7 @@ class ZendeskSubmissionClassifierTests(TestCase):
             category="general",
             email="user@example.com",
             product=self.product,
-            status=SupportTicket.STATUS_PENDING
+            submission_status=SupportTicket.STATUS_PENDING
         )
 
         zendesk_submission_classifier(submission.id)
@@ -71,7 +71,7 @@ class ZendeskSubmissionClassifierTests(TestCase):
             category="general",
             email="user@example.com",
             product=self.product,
-            status=SupportTicket.STATUS_PENDING
+            submission_status=SupportTicket.STATUS_PENDING
         )
 
         try:
@@ -80,7 +80,7 @@ class ZendeskSubmissionClassifierTests(TestCase):
             pass
 
         submission.refresh_from_db()
-        self.assertEqual(submission.status, SupportTicket.STATUS_PROCESSING_FAILED)
+        self.assertEqual(submission.submission_status, SupportTicket.STATUS_PROCESSING_FAILED)
 
     @patch("kitsune.llm.support.classifiers._handle_product_reassignment")
     @patch("kitsune.llm.support.classifiers.get_taxonomy")
@@ -103,7 +103,7 @@ class ZendeskSubmissionClassifierTests(TestCase):
             category="deployment",
             email="admin@enterprise.com",
             product=self.product,
-            status=SupportTicket.STATUS_PENDING
+            submission_status=SupportTicket.STATUS_PENDING
         )
 
         result = classify_zendesk_submission(submission)
@@ -138,7 +138,7 @@ class ZendeskSubmissionClassifierTests(TestCase):
             category="general",
             email="user@example.com",
             product=self.product,
-            status=SupportTicket.STATUS_PENDING
+            submission_status=SupportTicket.STATUS_PENDING
         )
 
         classify_zendesk_submission(submission)
@@ -171,7 +171,7 @@ class ProcessFailedZendeskTicketsTests(TestCase):
             category="general",
             email="user@example.com",
             product=self.product,
-            status=SupportTicket.STATUS_PROCESSING_FAILED
+            submission_status=SupportTicket.STATUS_PROCESSING_FAILED
         )
 
         process_failed_zendesk_tickets()
@@ -189,7 +189,7 @@ class ProcessFailedZendeskTicketsTests(TestCase):
             category="general",
             email="user@example.com",
             product=self.product,
-            status=SupportTicket.STATUS_PENDING
+            submission_status=SupportTicket.STATUS_PENDING
         )
         SupportTicket.objects.create(
             subject="Sent",
@@ -197,7 +197,7 @@ class ProcessFailedZendeskTicketsTests(TestCase):
             category="general",
             email="user@example.com",
             product=self.product,
-            status=SupportTicket.STATUS_SENT
+            submission_status=SupportTicket.STATUS_SENT
         )
 
         process_failed_zendesk_tickets()
@@ -215,7 +215,7 @@ class ProcessFailedZendeskTicketsTests(TestCase):
             category="general",
             email="user@example.com",
             product=self.product,
-            status=SupportTicket.STATUS_PROCESSING_FAILED
+            submission_status=SupportTicket.STATUS_PROCESSING_FAILED
         )
 
         process_failed_zendesk_tickets()
@@ -223,4 +223,4 @@ class ProcessFailedZendeskTicketsTests(TestCase):
         mock_send.assert_called_once_with(submission)
 
         submission.refresh_from_db()
-        self.assertEqual(submission.status, SupportTicket.STATUS_PROCESSING_FAILED)
+        self.assertEqual(submission.submission_status, SupportTicket.STATUS_PROCESSING_FAILED)

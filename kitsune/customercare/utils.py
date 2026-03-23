@@ -97,8 +97,8 @@ def send_support_ticket_to_zendesk(submission: SupportTicket) -> bool:
 
     def _handle_zendesk_exception(error: Exception) -> bool:
         """Flag a support ticket for manual review when Zendesk submission fails."""
-        submission.status = SupportTicket.STATUS_FLAGGED
-        submission.save(update_fields=["status"])
+        submission.submission_status = SupportTicket.STATUS_FLAGGED
+        submission.save(update_fields=["submission_status"])
         flag_object(
             submission,
             by_user=Profile.get_sumo_bot(),
@@ -138,14 +138,14 @@ def send_support_ticket_to_zendesk(submission: SupportTicket) -> bool:
     try:
         ticket_audit = client.create_ticket(submission.user, ticket_fields)
         submission.zendesk_ticket_id = str(ticket_audit.ticket.id)
-        submission.status = SupportTicket.STATUS_SENT
-        submission.save(update_fields=["zendesk_ticket_id", "status"])
+        submission.submission_status = SupportTicket.STATUS_SENT
+        submission.save(update_fields=["zendesk_ticket_id", "submission_status"])
         return True
     except APIException as e:
         error_str = str(e)
         if "UserSuspended" in error_str or "RecordInvalid" in error_str:
-            submission.status = SupportTicket.STATUS_REJECTED
-            submission.save(update_fields=["status"])
+            submission.submission_status = SupportTicket.STATUS_REJECTED
+            submission.save(update_fields=["submission_status"])
             return False
         return _handle_zendesk_exception(e)
     except Exception as e:
@@ -173,8 +173,8 @@ def process_zendesk_classification_result(
         submission_status: str = SupportTicket.STATUS_FLAGGED,
     ) -> None:
         """Helper function to update submission status and create a flag."""
-        submission.status = submission_status
-        submission.save(update_fields=["status"])
+        submission.submission_status = submission_status
+        submission.save(update_fields=["submission_status"])
         flag_object(
             submission,
             by_user=sumo_bot,
@@ -199,8 +199,8 @@ def process_zendesk_classification_result(
                     reason=FlaggedObject.REASON_SPAM,
                 )
             else:
-                submission.status = SupportTicket.STATUS_REJECTED
-                submission.save(update_fields=["status"])
+                submission.submission_status = SupportTicket.STATUS_REJECTED
+                submission.save(update_fields=["submission_status"])
         case ModerationAction.FLAG_REVIEW:
             notes = (
                 f"LLM flagged for manual review, for the following reason:\n"

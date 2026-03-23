@@ -246,8 +246,8 @@ class SendSupportTicketToZendeskTests(TestCase):
         result = send_support_ticket_to_zendesk(self.submission)
 
         self.assertFalse(result)
-        self.assertEqual(self.submission.status, SupportTicket.STATUS_REJECTED)
-        self.submission.save.assert_called_with(update_fields=["status"])
+        self.assertEqual(self.submission.submission_status, SupportTicket.STATUS_REJECTED)
+        self.submission.save.assert_called_with(update_fields=["submission_status"])
 
     @patch("kitsune.customercare.utils.ZendeskClient")
     def test_record_invalid_email_error_auto_rejects(self, mock_zendesk_client):
@@ -261,8 +261,8 @@ class SendSupportTicketToZendeskTests(TestCase):
         result = send_support_ticket_to_zendesk(self.submission)
 
         self.assertFalse(result)
-        self.assertEqual(self.submission.status, SupportTicket.STATUS_REJECTED)
-        self.submission.save.assert_called_with(update_fields=["status"])
+        self.assertEqual(self.submission.submission_status, SupportTicket.STATUS_REJECTED)
+        self.submission.save.assert_called_with(update_fields=["submission_status"])
 
     @patch("kitsune.customercare.utils.flag_object")
     @patch("kitsune.customercare.utils.Profile")
@@ -278,8 +278,8 @@ class SendSupportTicketToZendeskTests(TestCase):
         result = send_support_ticket_to_zendesk(self.submission)
 
         self.assertFalse(result)
-        self.assertEqual(self.submission.status, SupportTicket.STATUS_FLAGGED)
-        self.submission.save.assert_called_with(update_fields=["status"])
+        self.assertEqual(self.submission.submission_status, SupportTicket.STATUS_FLAGGED)
+        self.submission.save.assert_called_with(update_fields=["submission_status"])
         mock_flag_object.assert_called_once()
 
     @patch("kitsune.customercare.utils.flag_object")
@@ -296,8 +296,8 @@ class SendSupportTicketToZendeskTests(TestCase):
         result = send_support_ticket_to_zendesk(self.submission)
 
         self.assertFalse(result)
-        self.assertEqual(self.submission.status, SupportTicket.STATUS_FLAGGED)
-        self.submission.save.assert_called_with(update_fields=["status"])
+        self.assertEqual(self.submission.submission_status, SupportTicket.STATUS_FLAGGED)
+        self.submission.save.assert_called_with(update_fields=["submission_status"])
         mock_flag_object.assert_called_once()
 
     @patch("kitsune.customercare.utils.ZendeskClient")
@@ -312,7 +312,7 @@ class SendSupportTicketToZendeskTests(TestCase):
 
         self.assertTrue(result)
         self.assertEqual(self.submission.zendesk_ticket_id, "12345")
-        self.assertEqual(self.submission.status, SupportTicket.STATUS_SENT)
+        self.assertEqual(self.submission.submission_status, SupportTicket.STATUS_SENT)
 
 
 class ProcessZendeskClassificationResultTests(TestCase):

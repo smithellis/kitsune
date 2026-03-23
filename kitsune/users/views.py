@@ -217,6 +217,7 @@ def deactivation_log(request):
     return render(request, "users/deactivation_log.html", {"deactivations": deactivations})
 
 
+@require_GET
 def questions_contributed(request, username):
     # plus sign (+) is converted to space
     username = username.replace(" ", "+")
@@ -226,7 +227,7 @@ def questions_contributed(request, username):
         channel=Value("forum", output_field=CharField())
     )
     support_tickets = SupportTicket.objects.filter(
-        user=profile.user, status=SupportTicket.STATUS_SENT
+        user=profile.user, submission_status=SupportTicket.STATUS_SENT
     ).annotate(channel=Value("direct_support", output_field=CharField()))
 
     combined = sorted(

@@ -24,24 +24,10 @@
     {% else %}
       <ul class="my-questions">
         {% for question in questions %}
-<<<<<<< Updated upstream
-          {% if question.is_solved %}
-            {% set status_label = _("Solved") %}
-            {% set show_status_badge = false %}
-          {% elif question.is_locked %}
-            {% set status_label = _("Locked") %}
-            {% set show_status_badge = false %}
-          {% elif question.is_archived %}
-            {% set status_label = _("Archived") %}
-            {% set show_status_badge = false %}
-          {% else %}
-            {% set status_label = _("Open") %}
-            {% set show_status_badge = false %}
-=======
           {% set is_ticket = question.channel == "direct_support" %}
 
           {% if is_ticket %}
-            {% set status_label = question.zd_status or _("Submitted") %}
+            {% set status_label = question.get_zd_status_display() or _("Submitted") %}
             {% if question.zd_status == "solved" %}
               {% set status_class = "resolved" %}
             {% elif question.zd_status == "open" %}
@@ -63,13 +49,12 @@
           {% else %}
             {% set status_label = _("Open") %}
             {% set status_class = "open" %}
->>>>>>> Stashed changes
           {% endif %}
 
           <li class="my-questions--item">
-            <a href="{% if question.channel == "direct_support" %}#{% else %}{{ url('questions.details', question.id) }}{% endif %}" class="my-questions--link">
+            <a href="{% if is_ticket %}#{% else %}{{ url('questions.details', question.id) }}{% endif %}" class="my-questions--link">
               <div class="my-questions--icon-wrap" aria-hidden="true">
-                {% if question.channel == "direct_support" %}
+                {% if is_ticket %}
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="2" y="4" width="20" height="16" rx="2"/>
                     <polyline points="2,4 12,13 22,4"/>
@@ -83,15 +68,15 @@
               </div>
 
               <div class="my-questions--body">
-                <h3 class="my-questions--title">{{ question.title }}</h3>
-                <p class="my-questions--excerpt">{{ question.content|truncate(170) }}</p>
+                <h3 class="my-questions--title">{% if is_ticket %}{{ question.subject }}{% else %}{{ question.title }}{% endif %}</h3>
+                <p class="my-questions--excerpt">{% if is_ticket %}{{ question.description|truncate(170) }}{% else %}{{ question.content|truncate(170) }}{% endif %}</p>
 
                 <div class="my-questions--meta">
                   {% if question.product %}
                     <span>{{ question.product.title }}</span>
                   {% endif %}
 
-                  {% if question.channel == "direct_support" %}
+                  {% if is_ticket %}
                     <span class="my-questions--channel-badge my-questions--channel-badge--direct-support">{{ _("Direct Support") }}</span>
                   {% else %}
                     <span class="my-questions--channel-badge my-questions--channel-badge--forum">{{ _("Forum") }}</span>
@@ -101,7 +86,7 @@
 
                   <span class="my-questions--status-badge my-questions--status-badge--{{ status_class }}">{{ status_label }}</span>
 
-                  {% if question.num_answers %}
+                  {% if not is_ticket and question.num_answers %}
                     <span>
                       {% trans count=question.num_answers %}
                         {{ count }} reply
