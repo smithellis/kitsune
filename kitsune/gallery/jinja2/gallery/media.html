@@ -75,7 +75,7 @@
       </div>
 
       <h2 class="sumo-page-subheading">{{ _('Description') }}</h2>
-      <div class="description">{{ media.description|wiki_to_html }}</div>
+      <div class="description">{{ media.description|wiki_to_html_questions }}</div>
 
       {% if media_type == 'image' %}
         <h2 class="sumo-page-subheading">{{ _('Articles') }}</h2>
