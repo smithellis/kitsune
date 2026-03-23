@@ -1,0 +1,126 @@
+@use '../config' as c;
+@use 'protocol/css/includes/lib' as p;
+
+.my-questions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.my-questions--item {
+  border-bottom: 1px solid var(--color-border);
+  padding: p.$spacing-lg 0;
+
+  &:first-child {
+    border-top: 1px solid var(--color-border);
+  }
+}
+
+.my-questions--link {
+  display: flex;
+  gap: p.$spacing-md;
+  align-items: flex-start;
+  text-decoration: none;
+  color: inherit;
+
+  &:hover .my-questions--title {
+    text-decoration: underline;
+    color: var(--color-click);
+  }
+}
+
+.my-questions--icon-wrap {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-shade-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: p.$spacing-xs;
+  color: var(--color-text-light);
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.my-questions--body {
+  flex: 1;
+  min-width: 0;
+}
+
+.my-questions--title {
+  font-family: var(--heading-font-family);
+  @include p.font-size(16px);
+  font-weight: bold;
+  color: var(--color-heading);
+  margin: 0 0 p.$spacing-xs;
+  line-height: 1.4;
+}
+
+.my-questions--excerpt {
+  @include c.text-body-sm;
+  color: var(--color-text-light);
+  margin: 0 0 p.$spacing-sm;
+}
+
+.my-questions--meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: p.$spacing-xs p.$spacing-sm;
+  @include c.text-body-xs;
+  color: var(--color-text-light);
+}
+
+.my-questions--channel-badge,
+.my-questions--status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px p.$spacing-xs;
+  border-radius: p.$border-radius-sm;
+  @include c.text-body-xs;
+  font-weight: 600;
+}
+
+.my-questions--channel-badge {
+  &--forum {
+    background: rgba(c.color('blue', '06'), 0.08);
+    color: var(--color-link);
+  }
+
+  &--direct-support {
+    background: rgba(c.color('green', '06'), 0.08);
+    color: var(--color-success);
+  }
+}
+
+.my-questions--status-badge {
+  &--open {
+    background: rgba(c.color('blue', '06'), 0.08);
+    color: var(--color-link);
+  }
+
+  &--resolved {
+    background: rgba(c.color('green', '06'), 0.08);
+    color: var(--color-success);
+  }
+
+  &--pending {
+    background: rgba(c.color('yellow', '04'), 0.2);
+    color: c.color('orange', '08');
+  }
+
+  &--neutral {
+    background: var(--color-shade-bg);
+    color: var(--color-text-light);
+  }
+}
+
+.my-questions--empty {
+  padding: p.$spacing-lg 0;
+  color: var(--color-text-light);
+}
