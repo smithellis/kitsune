@@ -1,7 +1,9 @@
+import itertools
 import json
 import secrets
 import string
 from ast import literal_eval
+from operator import attrgetter
 
 import requests
 import waffle
@@ -9,6 +11,7 @@ from django.conf import settings
 from django.contrib import auth, messages
 from django.contrib.auth.models import User
 from django.core.exceptions import SuspiciousOperation
+from django.db.models import CharField, Value
 from django.http import (
     Http404,
     HttpResponse,
@@ -40,6 +43,7 @@ from sentry_sdk import capture_exception, capture_message
 from kitsune import users as constants
 from kitsune.access.decorators import login_required, logout_required, permission_required
 from kitsune.community.utils import num_deleted_contributions
+from kitsune.customercare.models import SupportTicket
 from kitsune.forums.models import Post, Thread
 from kitsune.kbadge.models import Award
 from kitsune.kbforums.models import Post as KBForumPost
@@ -213,12 +217,26 @@ def deactivation_log(request):
     return render(request, "users/deactivation_log.html", {"deactivations": deactivations})
 
 
+@require_GET
 def questions_contributed(request, username):
     # plus sign (+) is converted to space
     username = username.replace(" ", "+")
     profile = get_object_or_404(Profile, user__username=username, user__is_active=True)
 
-    questions = paginate(request, profile.user.questions.order_by("-created"))
+    forum_questions = profile.user.questions.filter(is_spam=False).annotate(
+        channel=Value("forum", output_field=CharField())
+    )
+    support_tickets = SupportTicket.objects.filter(
+        user=profile.user, submission_status=SupportTicket.STATUS_SENT
+    ).annotate(channel=Value("direct_support", output_field=CharField()))
+
+    combined = sorted(
+        itertools.chain(forum_questions, support_tickets),
+        key=attrgetter("created"),
+        reverse=True,
+    )
+
+    questions = paginate(request, combined)
 
     return render(
         request,

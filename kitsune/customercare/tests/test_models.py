@@ -12,7 +12,7 @@ class SupportTicketModelTests(TestCase):
 
     def test_status_choices_include_processing_failed(self):
         """Test that STATUS_PROCESSING_FAILED is a valid status choice."""
-        status_values = [choice[0] for choice in SupportTicket.STATUS_CHOICES]
+        status_values = [choice[0] for choice in SupportTicket.SUBMISSION_STATUS_CHOICES]
         self.assertIn(SupportTicket.STATUS_PROCESSING_FAILED, status_values)
         self.assertEqual(SupportTicket.STATUS_PROCESSING_FAILED, "processing_failed")
 
@@ -24,11 +24,11 @@ class SupportTicketModelTests(TestCase):
             category="test",
             email="test@example.com",
             product=self.product,
-            status=SupportTicket.STATUS_PROCESSING_FAILED
+            submission_status=SupportTicket.STATUS_PROCESSING_FAILED
         )
 
         ticket.refresh_from_db()
-        self.assertEqual(ticket.status, SupportTicket.STATUS_PROCESSING_FAILED)
+        self.assertEqual(ticket.submission_status, SupportTicket.STATUS_PROCESSING_FAILED)
 
     def test_default_status_is_pending(self):
         """Test that default status is STATUS_PENDING."""
@@ -40,7 +40,7 @@ class SupportTicketModelTests(TestCase):
             product=self.product
         )
 
-        self.assertEqual(ticket.status, SupportTicket.STATUS_PENDING)
+        self.assertEqual(ticket.submission_status, SupportTicket.STATUS_PENDING)
 
     def test_str_method(self):
         """Test the __str__ method includes status."""
@@ -50,7 +50,7 @@ class SupportTicketModelTests(TestCase):
             category="test",
             email="test@example.com",
             product=self.product,
-            status=SupportTicket.STATUS_PROCESSING_FAILED
+            submission_status=SupportTicket.STATUS_PROCESSING_FAILED
         )
 
         str_repr = str(ticket)

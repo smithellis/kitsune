@@ -58,7 +58,7 @@ class FlaggedQueueTestCase(TestCaseBase):
             category="test-category",
             email="test@example.com",
             product=product,
-            status=SupportTicket.STATUS_FLAGGED,
+            submission_status=SupportTicket.STATUS_FLAGGED,
         )
 
         flag = FlaggedObject(content_object=ticket, reason="spam", creator_id=self.flagger.id)
@@ -82,7 +82,7 @@ class FlaggedQueueTestCase(TestCaseBase):
             category="test",
             email="test@example.com",
             product=product,
-            status=SupportTicket.STATUS_FLAGGED,
+            submission_status=SupportTicket.STATUS_FLAGGED,
         )
         FlaggedObject.objects.create(
             content_object=ticket, reason="spam", creator_id=self.flagger.id

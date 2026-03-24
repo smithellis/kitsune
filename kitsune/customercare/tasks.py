@@ -41,8 +41,8 @@ def zendesk_submission_classifier(submission_id: int) -> None:
     except Exception as e:
         # After all retries exhausted, mark as processing failed
         log.error(f"Classification failed for ticket {submission_id}: {e}", exc_info=True)
-        submission.status = SupportTicket.STATUS_PROCESSING_FAILED
-        submission.save(update_fields=["status"])
+        submission.submission_status = SupportTicket.STATUS_PROCESSING_FAILED
+        submission.save(update_fields=["submission_status"])
         raise
 
 
@@ -82,9 +82,9 @@ def auto_reject_old_zendesk_spam() -> None:
     rejected_count = 0
 
     for flag in old_spam_flags:
-        if flag.content_object and flag.content_object.status == SupportTicket.STATUS_FLAGGED:
-            flag.content_object.status = SupportTicket.STATUS_REJECTED
-            flag.content_object.save(update_fields=["status"])
+        if flag.content_object and flag.content_object.submission_status == SupportTicket.STATUS_FLAGGED:
+            flag.content_object.submission_status = SupportTicket.STATUS_REJECTED
+            flag.content_object.save(update_fields=["submission_status"])
             rejected_count += 1
 
         flag.status = FlaggedObject.FLAG_ACCEPTED
@@ -106,7 +106,7 @@ def process_failed_zendesk_tickets() -> None:
     from kitsune.customercare.utils import send_support_ticket_to_zendesk
 
     failed_tickets = SupportTicket.objects.filter(
-        status=SupportTicket.STATUS_PROCESSING_FAILED
+        submission_status=SupportTicket.STATUS_PROCESSING_FAILED
     )
 
     processed_count = 0

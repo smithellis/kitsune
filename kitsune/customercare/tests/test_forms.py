@@ -221,7 +221,7 @@ class ZendeskFormTests(TestCase):
 
         self.assertIsInstance(submission, SupportTicket)
         self.assertEqual(submission.zendesk_tags, expected_tags)
-        self.assertEqual(submission.status, SupportTicket.STATUS_PENDING)
+        self.assertEqual(submission.submission_status, SupportTicket.STATUS_PENDING)
         self.assertEqual(submission.subject, "Test subject")
         self.assertEqual(submission.description, "Test description")
         self.assertEqual(submission.category, "vpn-connection-issues")
@@ -258,7 +258,7 @@ class ZendeskFormTests(TestCase):
 
         self.assertIsInstance(submission, SupportTicket)
         self.assertEqual(submission.zendesk_tags, expected_tags)
-        self.assertEqual(submission.status, SupportTicket.STATUS_PENDING)
+        self.assertEqual(submission.submission_status, SupportTicket.STATUS_PENDING)
         mock_task.assert_called_once_with(submission.id)
 
     @patch("kitsune.customercare.tasks.zendesk_submission_classifier.delay")
@@ -282,7 +282,7 @@ class ZendeskFormTests(TestCase):
 
         self.assertIsInstance(submission, SupportTicket)
         self.assertEqual(submission.zendesk_tags, expected_tags)
-        self.assertEqual(submission.status, SupportTicket.STATUS_PENDING)
+        self.assertEqual(submission.submission_status, SupportTicket.STATUS_PENDING)
         mock_task.assert_called_once_with(submission.id)
 
     @patch("kitsune.customercare.tasks.zendesk_submission_classifier.delay")
@@ -309,7 +309,7 @@ class ZendeskFormTests(TestCase):
 
         self.assertIsInstance(submission, SupportTicket)
         self.assertEqual(submission.zendesk_tags, [])
-        self.assertEqual(submission.status, SupportTicket.STATUS_PENDING)
+        self.assertEqual(submission.submission_status, SupportTicket.STATUS_PENDING)
         self.assertEqual(submission.category, "")
         mock_task.assert_called_once_with(submission.id)
 
@@ -366,7 +366,7 @@ class ZendeskFormTests(TestCase):
 
         self.assertIsInstance(submission, SupportTicket)
         self.assertEqual(submission.zendesk_tags, expected_tags)
-        self.assertEqual(submission.status, SupportTicket.STATUS_PENDING)
+        self.assertEqual(submission.submission_status, SupportTicket.STATUS_PENDING)
         self.assertEqual(submission.user, None)  # Anonymous users don't have a user
         self.assertEqual(submission.email, "test@example.com")
         mock_task.assert_called_once_with(submission.id)

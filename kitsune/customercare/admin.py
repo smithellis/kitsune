@@ -30,7 +30,7 @@ class SupportTicketAdmin(admin.ModelAdmin):
         "created",
     )
     list_display_links = ("id", "subject")
-    list_filter = ("status", "product", "created")
+    list_filter = ("submission_status", "product", "created")
     search_fields = ("subject", "description", "email", "zendesk_ticket_id")
     readonly_fields = ("created", "zendesk_ticket_id")
     date_hierarchy = "created"
@@ -49,11 +49,11 @@ class SupportTicketAdmin(admin.ModelAdmin):
             SupportTicket.STATUS_FLAGGED: "#d9534f",
             SupportTicket.STATUS_REJECTED: "#777",
         }
-        color = colors.get(obj.status, "#777")
+        color = colors.get(obj.submission_status, "#777")
         return format_html(
             '<span style="color: {}; font-weight: bold;">{}</span>',
             color,
-            obj.get_status_display(),
+            obj.get_submission_status_display(),
         )
 
 

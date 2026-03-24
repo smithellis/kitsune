@@ -399,15 +399,15 @@ def update(request, flagged_object_id):
 
         if (
             isinstance(flagged.content_object, SupportTicket)
-            and flagged.content_object.status == SupportTicket.STATUS_FLAGGED
+            and flagged.content_object.submission_status == SupportTicket.STATUS_FLAGGED
         ):
             if str(new_status) == str(FlaggedObject.FLAG_REJECTED) or (
                 flagged.reason == FlaggedObject.REASON_CONTENT_MODERATION
             ):
                 send_support_ticket_to_zendesk(flagged.content_object)
             elif str(new_status) == str(FlaggedObject.FLAG_ACCEPTED):
-                flagged.content_object.status = SupportTicket.STATUS_REJECTED
-                flagged.content_object.save(update_fields=["status"])
+                flagged.content_object.submission_status = SupportTicket.STATUS_REJECTED
+                flagged.content_object.save(update_fields=["submission_status"])
 
     if flagged.reason == FlaggedObject.REASON_CONTENT_MODERATION:
         content_object = flagged.content_object

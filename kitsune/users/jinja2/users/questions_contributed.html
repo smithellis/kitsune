@@ -12,20 +12,97 @@
         {{ _("Questions Asked") }}
       {% endif %}
     </h2>
+
     {% if not questions %}
-      {% if is_owner %}
-        <p>{{ _("You haven't posted any questions yet.") }}</p>
-      {% else %}
-        <p>{{ _("{user} hasn't posted any questions yet.")|f(user=display_name(profile.user)) }}
-      {% endif %}
+      <p class="my-questions--empty">
+        {% if is_owner %}
+          {{ _("You haven't posted any questions yet.") }}
+        {% else %}
+          {{ _("{user} hasn't posted any questions yet.")|f(user=display_name(profile.user)) }}
+        {% endif %}
+      </p>
+    {% else %}
+      <ul class="my-questions">
+        {% for question in questions %}
+          {% set is_ticket = question.channel == "direct_support" %}
+
+          {% if is_ticket %}
+            {% set status_label = question.get_zd_status_display() or _("Submitted") %}
+            {% if question.zd_status == "solved" %}
+              {% set status_class = "resolved" %}
+            {% elif question.zd_status == "open" %}
+              {% set status_class = "open" %}
+            {% elif question.zd_status in ("pending", "waiting") %}
+              {% set status_class = "pending" %}
+            {% else %}
+              {% set status_class = "neutral" %}
+            {% endif %}
+          {% elif question.is_solved %}
+            {% set status_label = _("Solved") %}
+            {% set status_class = "resolved" %}
+          {% elif question.is_locked %}
+            {% set status_label = _("Locked") %}
+            {% set status_class = "neutral" %}
+          {% elif question.is_archived %}
+            {% set status_label = _("Archived") %}
+            {% set status_class = "neutral" %}
+          {% else %}
+            {% set status_label = _("Open") %}
+            {% set status_class = "open" %}
+          {% endif %}
+
+          <li class="my-questions--item">
+            <a href="{% if is_ticket %}#{% else %}{{ url('questions.details', question.id) }}{% endif %}" class="my-questions--link">
+              <div class="my-questions--icon-wrap" aria-hidden="true">
+                {% if is_ticket %}
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <polyline points="2,4 12,13 22,4"/>
+                  </svg>
+                {% else %}
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                {% endif %}
+              </div>
+
+              <div class="my-questions--body">
+                <h3 class="my-questions--title">{% if is_ticket %}{{ question.subject }}{% else %}{{ question.title }}{% endif %}</h3>
+                <p class="my-questions--excerpt">{% if is_ticket %}{{ question.description|truncate(170) }}{% else %}{{ question.content|truncate(170) }}{% endif %}</p>
+
+                <div class="my-questions--meta">
+                  {% if question.product %}
+                    <span>{{ question.product.title }}</span>
+                  {% endif %}
+
+                  {% if is_ticket %}
+                    <span class="my-questions--channel-badge my-questions--channel-badge--direct-support">{{ _("Direct Support") }}</span>
+                  {% else %}
+                    <span class="my-questions--channel-badge my-questions--channel-badge--forum">{{ _("Forum") }}</span>
+                  {% endif %}
+
+                  <span>{{ _("Date:") }} {{ question.created.strftime('%b %d, %Y') }}</span>
+
+                  <span class="status-label status-label--{{ status_class }}">{{ status_label }}</span>
+
+                  {% if not is_ticket and question.num_answers %}
+                    <span>
+                      {% trans count=question.num_answers %}
+                        {{ count }} reply
+                      {% pluralize %}
+                        {{ count }} replies
+                      {% endtrans %}
+                    </span>
+                  {% endif %}
+                </div>
+              </div>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
     {% endif %}
-    <ul class="mzp-u-list-styled">
-      {% for question in questions %}
-        <a href="{{ url('questions.details', question.id) }}">
-          <li>{{ question.title }}</li>
-        </a>
-      {% endfor %}
-    </ul>
+
     {{ questions|paginator }}
   </article>
 {% endblock %}

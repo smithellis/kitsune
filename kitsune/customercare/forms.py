@@ -238,7 +238,7 @@ class ZendeskForm(forms.Form):
             product=product,
             user=user if (user and user.is_authenticated) else None,
             zendesk_tags=zendesk_tags,
-            status=SupportTicket.STATUS_PENDING,
+            submission_status=SupportTicket.STATUS_PENDING,
         )
 
         from kitsune.customercare.tasks import zendesk_submission_classifier
