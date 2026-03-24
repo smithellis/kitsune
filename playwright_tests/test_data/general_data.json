@@ -6,13 +6,13 @@
     "Firefox for Enterprise",
     "Thunderbird",
     "Thunderbird for Android",
-    "Firefox Focus"
+    "Firefox Focus",
+    "Mozilla Monitor"
   ],
   "premium_products": [
     "MDN Plus",
     "Firefox Relay",
-    "Mozilla Account",
-    "Mozilla Monitor"
+    "Mozilla Account"
   ],
   "subscription_redirects":
       {
