@@ -75,21 +75,26 @@ which will also be your `<origin>`.
 
 The remote troubleshooting API allows support.mozilla.org to access the contents of the `about:support` page.
 
-An additional permission needs to be granted to any origin you want to test this API on.
-Open `about:config` and append the relevant `<origin>` to the `webchannel.allowObject.urlWhitelist` preference.
-
-Then [grant the permission](#adding-permissions) as above,
+It can be enabled by [granting the permission](#adding-permissions) as above,
 where `<permission>` is `remote-troubleshooting`.
 
 ### Examples
 
+To enable temporarily on staging, [run the following command in the Web Console](#temporarily):
+
+```
+Services.perms.addFromPrincipal(
+  Services.scriptSecurityManager.createContentPrincipalFromOrigin("https://support.allizom.org"),
+  "remote-troubleshooting",
+  Services.perms.ALLOW_ACTION
+);
+```
+
 To enable permanently on staging:
 
-1. Add `https://support.allizom.org` to `webchannel.allowObject.urlWhitelist`.
+1. Add `origin	remote-troubleshooting	1	https://support.allizom.org` to your [permissions file](#permanently).
 
-2. Add `origin	remote-troubleshooting	1	https://support.allizom.org` to your [permissions file](#permanently).
-
-3. Restart Firefox.
+2. Restart Firefox.
 
 ## UITour API
 
