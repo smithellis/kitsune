@@ -9,7 +9,7 @@
   <p class="compact-info"><strong>{{ _('Email:') }}</strong> {{ object.content_object.email }}</p>
   <p class="compact-info"><strong>{{ _('Product:') }}</strong> {{ object.content_object.product }}</p>
   <p class="compact-info"><strong>{{ _('Category:') }}</strong> {{ object.content_object.category }}</p>
-  <p class="compact-info"><strong>{{ _('Status:') }}</strong> {{ object.content_object.get_status_display() }}</p>
+  <p class="compact-info"><strong>{{ _('Status:') }}</strong> {{ object.content_object.get_submission_status_display() }}</p>
 
   <h3 class="flagged-content__subheading">{{ _('Created:') }}</h3>
   {% if object.content_object.user %}
