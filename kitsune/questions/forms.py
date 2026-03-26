@@ -22,9 +22,7 @@ CRASH_ID_LABEL = _lazy("Crash ID(s)")
 # if you want to use the following string, update it to remove "en-US" from the link first
 # when updating, don't remove the original string, just mark it as deprecated and create a new one
 # L10n: Unused. A description of the "Crash ID(s)" field, displayed when filing a question form (e.g., on https://support.mozilla.org/questions/new/firefox/form).
-CRASH_ID_HELP = _lazy(
-    "If you submit information to Mozilla when you crash, you'll be given a crash ID which uniquely identifies your crash and lets us look at details that may help identify the cause. To find your recently submitted crash IDs, go to <strong>about:crashes</strong> in your location bar. <a href='https://support.mozilla.com/en-US/kb/Firefox+crashes#Getting_the_most_accurate_help_with_your_Firefox_crash' target='_blank'>Click for detailed instructions</a>."
-)
+CRASH_ID_HELP = _lazy("If you submit information to Mozilla when you crash, you'll be given a crash ID which uniquely identifies your crash and lets us look at details that may help identify the cause. To find your recently submitted crash IDs, go to <strong>about:crashes</strong> in your location bar. <a href='https://support.mozilla.com/en-US/kb/Firefox+crashes#Getting_the_most_accurate_help_with_your_Firefox_crash' target='_blank'>Click for detailed instructions</a>.")
 # L10n: Unused. A label for a field, displayed when filing a question form (e.g., on https://support.mozilla.org/questions/new/firefox/form).
 FREQUENCY_LABEL = _lazy("This happens")
 FREQUENCY_CHOICES = [
@@ -51,9 +49,7 @@ DEVICE_LABEL = _lazy("Mobile device")
 # L10n: A label for a field, displayed when filing a question form (e.g., on https://support.mozilla.org/questions/new/firefox/form).
 TROUBLESHOOTING_LABEL = _lazy("Troubleshooting Information")
 # L10n: A description of the "Troubleshooting Information" field, displayed when filing a question form (e.g., on https://support.mozilla.org/questions/new/firefox/form).
-TROUBLESHOOTING_HELP = _lazy(
-    "This information gives details about the internal workings of your browser that will help in answering your question."
-)
+TROUBLESHOOTING_HELP = _lazy("This information gives details about the internal workings of your browser that will help in answering your question.")
 # L10n: A label for a field, displayed when filing a question form (e.g., on https://support.mozilla.org/questions/new/firefox/form).
 TITLE_LABEL = _lazy("Summarize your question")
 # L10n: A description of the "Summarize your question" field, displayed when filing a question form (e.g., on https://support.mozilla.org/questions/new/firefox/form).
@@ -61,9 +57,7 @@ TITLE_HELP_TEXT = _lazy("Please summarize your question in one sentence:")
 # L10n: A label for a field, displayed when filing a question form (e.g., on https://support.mozilla.org/questions/new/firefox/form).
 CONTENT_LABEL = _lazy("How can we help?")
 # L10n: A description of the "How can we help?" field, displayed when filing a question form (e.g., on https://support.mozilla.org/questions/new/firefox/form).
-CONTENT_HELP_TEXT = _lazy(
-    'Please include as much detail as possible. Also, remember to follow our <a href="https://support.mozilla.org/kb/mozilla-support-rules-guidelines" target="_blank">rules and guidelines</a>.'
-)
+CONTENT_HELP_TEXT = _lazy('Please include as much detail as possible. Also, remember to follow our <a href="https://support.mozilla.org/kb/mozilla-support-rules-guidelines" target="_blank">rules and guidelines</a>.')
 # L10n: A label for a field, displayed when filing a Firefox-related question form (e.g., on https://support.mozilla.org/questions/new/firefox/form).
 FF_VERSION_LABEL = _lazy("Firefox version")
 # L10n: A label for a field, displayed when filing a Thunderbird-related question form (e.g., on https://support.mozilla.org/questions/new/thunderbird/form).
