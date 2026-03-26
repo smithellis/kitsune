@@ -14,7 +14,7 @@ jobs:
           command: |
             pip install pre-commit==4.2.0
             pre-commit run --all-files
-  test-and-build:
+  test-python:
     docker:
       - image: cimg/python:3.11
     steps:
@@ -37,6 +37,19 @@ jobs:
       - run:
           name: Run unit tests
           command: ./bin/dc_ci.sh run test ./bin/run-unit-tests.sh
+  test-js:
+    docker:
+      - image: cimg/python:3.11
+    steps:
+      - checkout:
+         method: blobless
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Build frontend test image
+          command: |
+            cp .env-build .env
+            ./bin/dc_ci.sh build --progress=plain frontend-test
       - run:
           name: Run js tests
           command: ./bin/dc_ci.sh run frontend-test
@@ -45,4 +58,5 @@ workflows:
   lint-test-build:
     jobs:
       - lint
-      - test-and-build
+      - test-python
+      - test-js
