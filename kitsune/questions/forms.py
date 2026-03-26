@@ -62,8 +62,14 @@ CONTENT_HELP_TEXT = _lazy('Please include as much detail as possible. Also, reme
 FF_VERSION_LABEL = _lazy("Firefox version")
 # L10n: A label for a field, displayed when filing a Thunderbird-related question form (e.g., on https://support.mozilla.org/questions/new/thunderbird/form).
 TB_VERSION_LABEL = _lazy("Thunderbird version")
-# L10n: A placeholder for the "Thunderbird version" field, displayed when filing a Thunderbird-related question form (e.g., on https://support.mozilla.org/questions/new/thunderbird/form).
-TB_VERSION_PLACEHOLDER = _lazy("e.g., 140.5.0esr, 146.1.0 release or 147.0b4")
+# L10n: A description of the "Thunderbird version" field, displayed when filing a Thunderbird (desktop) question form on https://support.mozilla.org/questions/new/thunderbird/form.
+TB_VERSION_HELP_TEXT_DESKTOP = _lazy("Find your version in Thunderbird App Menu ☰ > Help > About, e.g., 140.8.0esr, 149.0 or 150.0b1.")
+# L10n: A description of the "Thunderbird version" field, displayed when filing a Thunderbird for Android question form on https://support.mozilla.org/questions/new/thunderbird-android/form.
+TB_VERSION_HELP_TEXT_ANDROID = _lazy("Find your version in Thunderbird App Menu ☰ (the top-left corner) > Settings > Support/About, e.g., 17.0.")
+# L10n: A placeholder for the "Thunderbird version" field, displayed when filing a Thunderbird (desktop) question form on https://support.mozilla.org/questions/new/thunderbird/form.
+TB_VERSION_PLACEHOLDER_DESKTOP = _lazy("e.g., 140.8.0esr, 149.0 or 150.0b1")
+# L10n: A placeholder for the "Thunderbird version" field, displayed when filing a Thunderbird for Android question form on https://support.mozilla.org/questions/new/thunderbird-android/form.
+TB_VERSION_PLACEHOLDER_ANDROID = _lazy("e.g., 17.0")
 # L10n: A label for a field, displayed when filing a question form (e.g., on https://support.mozilla.org/questions/new/firefox/form).
 OS_LABEL = _lazy("Operating system")
 # L10n: A label for a field, displayed when filing a question form (e.g., on https://support.mozilla.org/questions/new/firefox/form).
@@ -121,12 +127,21 @@ class EditQuestionForm(forms.ModelForm):
             )
 
         if "tb_version" in extra_fields:
+            tb_version_help_text = ""
+            tb_version_placeholder = ""
+            if product.slug == "thunderbird":
+                tb_version_help_text = TB_VERSION_HELP_TEXT_DESKTOP
+                tb_version_placeholder = TB_VERSION_PLACEHOLDER_DESKTOP
+            elif product.slug == "thunderbird-android":
+                tb_version_help_text = TB_VERSION_HELP_TEXT_ANDROID
+                tb_version_placeholder = TB_VERSION_PLACEHOLDER_ANDROID
             self.fields["tb_version"] = forms.CharField(
                 label=TB_VERSION_LABEL,
-                required=False,
+                help_text=tb_version_help_text,
+                required=True,
                 max_length=30 - len("Thunderbird "),
                 strip=True,  # default, but we want to ensure this
-                widget=forms.TextInput(attrs={"placeholder": TB_VERSION_PLACEHOLDER}),
+                widget=forms.TextInput(attrs={"placeholder": tb_version_placeholder}),
             )
 
         if "os" in extra_fields:
