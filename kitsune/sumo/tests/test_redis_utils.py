@@ -2,6 +2,8 @@ import multiprocessing
 import time
 from unittest import mock
 
+from django.test import tag
+
 from kitsune.sumo.redis_utils import RateLimit, RedisError
 from kitsune.sumo.tests import TestCase
 
@@ -63,6 +65,7 @@ class TestRateLimit(TestCase):
         self.assertTrue(self.rate_limit.is_rate_limited())
         self.assertTrue(time_waited == 0.1)
 
+    @tag("no_parallel")
     def test_is_rate_limited_multiple_processes(self):
         """Test is_rate_limited() across multiple processes."""
         shared_counter = multiprocessing.Value("i", 0)
