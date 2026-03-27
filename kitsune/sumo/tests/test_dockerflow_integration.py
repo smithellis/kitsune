@@ -23,7 +23,7 @@ class TestDockerflowIntegration(TestCase):
         self.assertEqual("warning", content["status"])
 
     def test_request_summary_log(self):
-        log_capture = LogCapture(attributes=("name", "levelname", "getMessage", "path", "errno"))
+        log_capture = LogCapture("request.summary", attributes=("name", "levelname", "getMessage", "path", "errno"))
 
         self.client.get(reverse("search", locale="en-US"))
 

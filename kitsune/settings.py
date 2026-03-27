@@ -1403,6 +1403,8 @@ INACTIVE_GROUP_MEMBER_RETENTION_DAYS = config(
     "INACTIVE_GROUP_MEMBER_RETENTION_DAYS", default=180, cast=int
 )
 
+TEST_RUNNER = "kitsune.sumo.test_runner.SpawnParallelRunner"
+
 # Celery beat configuration
 DJANGO_CELERY_BEAT_TZ_AWARE = config("USE_TZ", default=True, cast=bool)
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
