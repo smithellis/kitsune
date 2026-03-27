@@ -22,17 +22,15 @@ class ProductSupportForum(BasePage):
             "//div[@id='questions-list']//h2[@class='forum--question-item-heading']/a")
         self.question_tag_list = lambda question_id: page.locator(
             f"article#{question_id} li.tag")
-        self.is_spam_locator = page.locator("//div[@id='questions-list']//li[@class='is-spam']")
+        self.is_spam_locator = page.locator("//div[@id='questions-list']//span[text()='Spam']")
         self.is_spam_locator_for_question = lambda question_id: page.locator(
-            f"//div[@id='questions-list']//article[@id='{question_id}']//li[@class='is-spam']")
+            f"//div[@id='questions-list']//article[@id='{question_id}']//span[text()='Spam']")
         self.question_solved_indicator = lambda question_id: page.locator(
-            f"//article[@id='{question_id}']//li[@class='thread-solved']")
-        self.question_contributed_indicator = lambda question_id: page.locator(
-            f"//article[@id='{question_id}']//li[@class='thread-contributed']")
+            f"//article[@id='{question_id}']//span[text()='Solved']")
         self.question_archived_indicator = lambda question_id: page.locator(
-            f"//article[@id='{question_id}']//li[@class='thread-archived']")
+            f"//article[@id='{question_id}']//span[text()='Archived']")
         self.question_locked_indicator = lambda question_id: page.locator(
-            f"//article[@id='{question_id}']//li[@class='thread-locked']")
+            f"//article[@id='{question_id}']//span[text()='Locked']")
 
         """Locators belonging to the filter options sections."""
         self.selected_tab_filter = page.locator(
@@ -150,14 +148,6 @@ class ProductSupportForum(BasePage):
             question_id (str): The question ID.
         """
         return self._is_element_visible(self.question_solved_indicator(question_id))
-
-    def is_question_contributed_indicator_displayed(self, question_id: str) -> bool:
-        """
-        Return if the contributed indicator is displayed for a certain question or not.
-        Args:
-            question_id (str): The question ID.
-        """
-        return self._is_element_visible(self.question_contributed_indicator(question_id))
 
     def is_question_archived_indicator_displayed(self, question_id: str) -> bool:
         """

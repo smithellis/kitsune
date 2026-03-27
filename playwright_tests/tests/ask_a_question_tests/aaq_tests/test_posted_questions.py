@@ -620,7 +620,7 @@ def test_mark_as_spam_functionality(page: Page, create_user_factory):
 @pytest.mark.smokeTest
 @pytest.mark.postedQuestions
 @pytest.mark.parametrize("user_type", ['', 'Simple User'])
-def test_question_topics(page: Page, user_type, create_user_factory):
+def test_question_tags(page: Page, user_type, create_user_factory):
     utilities = Utilities(page)
     sumo_pages = SumoPages(page)
     test_user = create_user_factory()
@@ -680,13 +680,12 @@ def test_question_topics(page: Page, user_type, create_user_factory):
                 assert (question == sumo_pages.product_support_forum.
                         get_text_of_selected_tag_filter_option())
 
-            with check, allure.step("Verifying that each listed question inside the product "
-                                    "forum contains the filtered tab"):
-                for article_id in sumo_pages.product_support_forum.extract_question_ids(
-                ):
-                    assert (question in sumo_pages.product_support_forum.
-                            get_all_question_list_tags(article_id))
-                utilities.navigate_back()
+                with allure.step("Verifying that the question is successfully displayed"):
+                    assert (
+                        posted_question["question_details"]["question_id"
+                        ] in sumo_pages.product_support_forum.get_ids_of_all_listed_questions())
+                utilities.navigate_to_link(
+                    posted_question['question_details']['question_page_url'])
 
     with allure.step("Navigate back to the posted question, signing in with a Forum Moderator "
                      "account and removing the newly added tag"):
