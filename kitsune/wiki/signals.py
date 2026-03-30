@@ -1,7 +1,29 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 
 from kitsune.wiki.models import Document
+
+
+@receiver(
+    m2m_changed,
+    sender=Document.restrict_to_groups.through,
+    dispatch_uid="wiki.render_on_restrict_to_groups_change",
+)
+def render_on_restrict_to_groups_change(sender, instance, action, **kwargs):
+    """
+    Trigger a cascade re-render when a document's "restrict_to_groups" changes,
+    since the parser uses "restrict_to_groups" to enforce inclusion permission checks.
+    Translations inherit their parent's restrict_to_groups, so they must be
+    re-rendered as well.
+    """
+    if action not in ("post_add", "post_remove", "post_clear"):
+        return
+
+    from kitsune.wiki.tasks import render_document_cascade
+
+    render_document_cascade.delay(instance.id)
+    for translation in instance.translations.all():
+        render_document_cascade.delay(translation.id)
 
 
 @receiver(
