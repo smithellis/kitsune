@@ -3,65 +3,80 @@
 {% set crumbs = [(url('kbadge.badges_list'), _('Badges')), (url('kbadge.awards_list'), _('Recently Awarded')), (None, pgettext('DB: badger.Badge.title', badge.title))] %}
 
 {% block content %}
-<div class="grid_6">
-  <h2>
+  <h1 class="sumo-page-heading">
     {% trans badge_name=pgettext('DB: badger.Badge.title', badge.title) %}
       Awarded badge: {{ badge_name }}
     {% endtrans %}
-  </h2>
+  </h1>
 
-  <dl class="badge-details" data-slug="{{ badge.slug }}">
-    {% if badge.image %}
-      <dt>{{ _('Image:') }}</dt>
-      <dd class="image"><a href="{{ badge.get_absolute_url() }}" class="image"><img src="{{ badge.image.url }}" width="256" height="256" /></a></dd>
-    {% endif %}
+  <div class="card elevation-01 lg-pad mb" data-slug="{{ badge.slug }}">
+    <div class="avatar-group">
+      {% if badge.image %}
+        <figure class="avatar-group--figure text-center">
+          <a href="{{ badge.get_absolute_url() }}">
+            <img src="{{ badge.image.url }}" alt="{{ pgettext('DB: badger.Badge.title', badge.title) }}" width="160" height="160" />
+          </a>
+        </figure>
+      {% endif %}
 
-    {% if badge.description %}
-      <dt>{{ _('Description:') }}</dt>
-      <dd class="description">{{ pgettext('DB: badger.Badge.description', badge.description) }}</dd>
-    {% endif %}
+      <div class="avatar-group--details">
+        <dl class="sumo-dl">
+          {% if badge.description %}
+            <dt><strong>{{ _('Description:') }}</strong></dt>
+            <dd>{{ pgettext('DB: badger.Badge.description', badge.description) }}</dd>
+          {% endif %}
 
-    {% if badge.creator %}
-      <dt>{{ _('Creator:') }}</dt>
-      <dd><a rel="nofollow" href="{{ profile_url(badge.creator) }}">{{ badge.creator }}</a></dd>
-    {% endif %}
+          {% if badge.creator %}
+            <dt><strong>{{ _('Creator:') }}</strong></dt>
+            <dd>
+              <img class="avatar" src="{{ profile_avatar(badge.creator) }}" alt="{{ display_name(badge.creator) }}" width="24" height="24" />
+              <a rel="nofollow" href="{{ profile_url(badge.creator) }}">{{ display_name(badge.creator) }}</a>
+            </dd>
+          {% endif %}
 
-    <dt>{{ _('Created:') }}</dt>
-    <dd>{{ datetimeformat(badge.created) }}</dd>
+          <dt><strong>{{ _('Created:') }}</strong></dt>
+          <dd>{{ datetimeformat(badge.created) }}</dd>
 
-    <dt>{{ _('Modified:') }}</dt>
-    <dd>{{ datetimeformat(badge.modified) }}</dd>
-  </dl>
-</div>
+          <dt><strong>{{ _('Modified:') }}</strong></dt>
+          <dd>{{ datetimeformat(badge.modified) }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
 
-<div class="grid_6">
-  <h2>{{ _('Award details') }}</h2>
-  <dl class="badge-details">
-    <dt>{{ _('Awarded to:') }}</dt>
-    <dd class="awarded_to">
-      <a rel="nofollow" href="{{ profile_url(award.user) }}">
-        <img class="avatar" src="{{ profile_avatar(award.user) }}" alt="" title="{{ display_name(award.user) }}">
-        <br>{{ award.user }}
-      </a>
-    </dd>
+  <h2 class="sumo-page-subheading">{{ _('Award details') }}</h2>
 
-    {% if award.description %}
-      <dt>{{ _('Explanation:') }}</dt>
-      <dd class="description">{{ award.description }}</dd>
-    {% endif %}
-
-    {% if award.creator %}
-      <dt>{{ _('Awarded by:') }}</dt>
-      <dd>
-        <a rel="nofollow" href="{{ profile_url(award.creator) }}">
-          <img class="avatar" src="{{ profile_avatar(award.creator) }}" alt="" title="{{ award.creator }}">
-          {{ award.creator }}
+  <div class="card elevation-01 lg-pad mb">
+    <div class="avatar-group">
+      <figure class="avatar-group--figure text-center">
+        <a rel="nofollow" href="{{ profile_url(award.user) }}">
+          <img class="avatar" src="{{ profile_avatar(award.user) }}" alt="{{ display_name(award.user) }}" width="96" height="96" />
         </a>
-      </dd>
-    {% endif %}
+        <figcaption class="award-awardee-name">
+          <a rel="nofollow" href="{{ profile_url(award.user) }}">{{ display_name(award.user) }}</a>
+        </figcaption>
+      </figure>
 
-    <dt>{{ _('Issued on:') }}</dt>
-    <dd>{{ datetimeformat(award.created) }}</dd>
-  </dl>
-</div>
+      <div class="avatar-group--details">
+        <dl class="sumo-dl">
+          {% if award.description %}
+            <dt><strong>{{ _('Explanation:') }}</strong></dt>
+            <dd>{{ award.description }}</dd>
+          {% endif %}
+
+          {% if award.creator %}
+            <dt><strong>{{ _('Awarded by:') }}</strong></dt>
+            <dd>
+              <img class="avatar" src="{{ profile_avatar(award.creator) }}" alt="{{ display_name(award.creator) }}" width="24" height="24" />
+              <a rel="nofollow" href="{{ profile_url(award.creator) }}">{{ display_name(award.creator) }}</a>
+            </dd>
+          {% endif %}
+
+          <dt><strong>{{ _('Issued on:') }}</strong></dt>
+          <dd>{{ datetimeformat(award.created) }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
 {% endblock %}

@@ -51,3 +51,21 @@
     color: var(--color-marketing-gray-07);
   }
 }
+
+.award-awardee-name {
+  margin-top: p.$spacing-sm;
+  @include c.text-body-sm;
+  font-weight: bold;
+  text-align: center;
+  overflow-wrap: break-word;
+  word-break: break-word;
+
+  a {
+    color: var(--color-heading);
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
