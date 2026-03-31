@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (questionId) {
                         url = `/en-US/questions/${questionId}/edit`;
                     } else if (ticketId) {
-                        url = `/en-US/customercare/support-tickets/${ticketId}/update-topic`;
+                        url = this.dataset.updateTopicUrl;
                     }
                     const response = await fetchData(url, { method: 'POST', body: { topic: this.value } });
                     if (response) {

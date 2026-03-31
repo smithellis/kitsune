@@ -31,7 +31,9 @@
         {% csrf_token %}
         <div class="dropdown-wrapper">
           <label for="topic-dropdown-{{ object.content_object.id }}">{{ _('Change Topic:') }}</label>
-          <select id="topic-dropdown-{{ object.content_object.id }}" class="topic-dropdown" name="topic" data-ticket-id="{{ object.content_object.id }}">
+          <select id="topic-dropdown-{{ object.content_object.id }}" class="topic-dropdown" name="topic"
+                  data-ticket-id="{{ object.content_object.id }}"
+                  data-update-topic-url="{{ url('customercare.update_topic', ticket_id=object.content_object.id) }}">
             {% for topic in object.available_topics %}
               <option value="{{ topic.id }}" {% if object.content_object.topic and topic.id == object.content_object.topic.id %}selected{% endif %}>
                 {{ topic.title|safe}}
