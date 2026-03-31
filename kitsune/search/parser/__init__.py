@@ -21,7 +21,7 @@ _token = Regex(r"[^\(\)\s]+")  # everything but chars which conflict with the be
 _arg = Word(alphas + "_.-")
 _value = (
     Regex(r"\"[^\"]+\"") | Regex(r"\([^\(\)]+\)")  # match phrase surrounded with "" or ()
-).setParseAction(removeQuotes) | _token
+).set_parse_action(removeQuotes) | _token
 
 # operators:
 # a special kind of token which can be nested with any other token (including operators)
@@ -37,9 +37,9 @@ _space = White()
 # e.g. "range:date:lt:(2019 OR 2020)" makes no sense
 _range = (
     Literal("range:") + _arg("field") + _colon + _arg("operator") + _colon + _value("value")
-).addParseAction(RangeToken)
-_exact = (Literal("exact:") + _arg("field") + _colon + _value("value")).addParseAction(ExactToken)
-_term = (dblQuotedString | _token)("term").addParseAction(TermToken)
+).add_parse_action(RangeToken)
+_exact = (Literal("exact:") + _arg("field") + _colon + _value("value")).add_parse_action(ExactToken)
+_term = (dblQuotedString | _token)("term").add_parse_action(TermToken)
 
 # the overall expression:
 search_term = _range | _exact | _term
@@ -60,7 +60,7 @@ search_expression = (
 
 class Parser:
     def __init__(self, query):
-        self.parsed = search_expression.parseString(query)[0]
+        self.parsed = search_expression.parse_string(query)[0]
 
     def __repr__(self):
         """Create a string representation of this parsed string suitable for debugging."""
