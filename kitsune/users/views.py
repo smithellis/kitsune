@@ -11,7 +11,6 @@ from django.conf import settings
 from django.contrib import auth, messages
 from django.contrib.auth.models import User
 from django.core.exceptions import SuspiciousOperation
-from django.db.models import CharField, Value
 from django.http import (
     Http404,
     HttpResponse,
@@ -223,12 +222,37 @@ def questions_contributed(request, username):
     username = username.replace(" ", "+")
     profile = get_object_or_404(Profile, user__username=username, user__is_active=True)
 
-    forum_questions = profile.user.questions.filter(is_spam=False).annotate(
-        channel=Value("forum", output_field=CharField())
-    )
-    support_tickets = SupportTicket.objects.filter(
-        user=profile.user, submission_status=SupportTicket.STATUS_SENT
-    ).annotate(channel=Value("direct_support", output_field=CharField()))
+    channel = request.GET.get("channel")
+    product_slug = request.GET.get("product")
+    topic_slug = request.GET.get("topic")
+
+    if channel != "direct_support":
+        forum_questions = (
+            profile.user.questions.filter(is_spam=False)
+            .select_related("solution", "product", "topic", "last_answer", "last_answer__creator")
+            .order_by("-created")
+        )
+        if product_slug:
+            forum_questions = forum_questions.filter(product__slug=product_slug)
+        if topic_slug:
+            forum_questions = forum_questions.filter(topic__slug=topic_slug)
+    else:
+        forum_questions = profile.user.questions.none()
+
+    if channel != "forum":
+        support_tickets = (
+            SupportTicket.objects.filter(
+                user=profile.user, submission_status=SupportTicket.STATUS_SENT
+            )
+            .select_related("product", "topic")
+            .order_by("-created")
+        )
+        if product_slug:
+            support_tickets = support_tickets.filter(product__slug=product_slug)
+        if topic_slug:
+            support_tickets = support_tickets.filter(topic__slug=topic_slug)
+    else:
+        support_tickets = SupportTicket.objects.none()
 
     combined = sorted(
         itertools.chain(forum_questions, support_tickets),
@@ -244,6 +268,9 @@ def questions_contributed(request, username):
         {
             "profile": profile,
             "questions": questions,
+            "channel": channel,
+            "product_slug": product_slug,
+            "topic_slug": topic_slug,
         },
     )
 

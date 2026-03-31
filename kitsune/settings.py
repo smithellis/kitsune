@@ -759,6 +759,9 @@ SESSION_SERIALIZER = config(
 # Our group with the power to see hidden docs and message groups.
 STAFF_GROUP = "Staff"
 
+# Group with elevated forum moderation permissions (e.g. "Show me" filter, owner views).
+FORUM_MODERATORS_GROUP = config("FORUM_MODERATORS_GROUP", default="Forum Moderators")
+
 # CSRF
 CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=not DEBUG, cast=bool)
 #

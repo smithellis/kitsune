@@ -1,0 +1,140 @@
+@use '../config' as c;
+@use 'protocol/css/includes/lib' as p;
+
+.question-entry-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.question-entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  column-gap: p.$spacing-md;
+  border-bottom: 1px solid var(--color-light-gray-04);
+  padding: p.$spacing-xl 0;
+
+  &:first-child {
+    padding-top: 0;
+  }
+}
+
+.question-entry--link {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+.question-entry--title-link {
+  color: var(--color-heading);
+  text-decoration: none;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  &:hover {
+    text-decoration: underline;
+    color: var(--color-click);
+  }
+}
+
+.question-entry--icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-shade-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-light);
+
+  svg {
+    width: p.$spacing-md;
+    height: p.$spacing-md;
+  }
+}
+
+.question-entry--body {
+  flex: 1;
+  min-width: 0;
+}
+
+.question-entry--title {
+  font-family: var(--heading-font-family);
+  @include c.text-body-lg;
+  font-weight: bold;
+  margin: 0 0 p.$spacing-sm;
+}
+
+.question-entry--excerpt {
+  @include c.text-body-lg;
+  color: var(--color-text-light);
+  margin: 0 0 p.$spacing-md;
+}
+
+.question-entry--meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: p.$spacing-xs p.$spacing-sm;
+  @include c.text-body-xs;
+  color: var(--color-text-light);
+}
+
+.question-entry--meta-item {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: p.$spacing-xs;
+  color: inherit;
+  text-decoration: none;
+
+  svg {
+    width: p.$spacing-md;
+    height: p.$spacing-md;
+    flex-shrink: 0;
+  }
+
+  &:hover {
+    color: var(--color-link);
+    text-decoration: underline;
+  }
+}
+
+.question-entry--reply-count,
+.question-entry--vote-count {
+  gap: p.$spacing-xs;
+  align-items: center;
+
+  svg {
+    width: p.$spacing-md;
+    height: p.$spacing-md;
+    flex-shrink: 0;
+    transform: translateY(2px);
+  }
+}
+
+.question-entry--extras {
+  position: relative;
+  z-index: 1;
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: p.$spacing-xs p.$spacing-sm;
+  margin-top: p.$spacing-md;
+  @include c.text-body-md;
+  color: var(--color-text);
+
+  .status-label,
+  .my-questions--channel-badge {
+    @include c.text-body-md;
+  }
+}
