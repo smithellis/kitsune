@@ -1055,7 +1055,7 @@ class QuestionsTemplateTestCase(TestCase):
         # Now there should be 1 question tagged 'mobile'
         response = self.client.get(tagged)
         doc = pq(response.content)
-        self.assertEqual(1, len(doc(".forum--question-item")))
+        self.assertEqual(1, len(doc(".question-entry")))
         self.assertEqual(
             "{}/en-US/questions/all?tagged=mobile&show=all".format(settings.CANONICAL_URL),
             doc('link[rel="canonical"]')[0].attrib["href"],
@@ -1102,10 +1102,10 @@ class QuestionsTemplateTestCase(TestCase):
 
             # This won't work, because the test case base adds more tests than
             # we expect in it's setUp(). TODO: Fix that.
-            self.assertEqual(len(expected), len(doc(".forum--question-item")))
+            self.assertEqual(len(expected), len(doc(".question-entry")))
 
             for q in expected:
-                self.assertEqual(1, len(doc(".forum--question-item[id=question-{}]".format(q.id))))
+                self.assertEqual(1, len(doc(".question-entry[id=question-{}]".format(q.id))))
 
         # No filtering -> All questions.
         check("all", [q1, q2, q3])
@@ -1147,7 +1147,7 @@ class QuestionsTemplateTestCase(TestCase):
             # self.assertEqual(len(expected), len(doc('.forum--question-item')))
 
             for q in expected:
-                self.assertEqual(1, len(doc(".forum--question-item[id=question-{}]".format(q.id))))
+                self.assertEqual(1, len(doc(".question-entry[id=question-{}]".format(q.id))))
 
         # No filtering -> All questions.
         check({}, [q1, q2, q3])
@@ -1178,22 +1178,21 @@ class QuestionsTemplateTestCase(TestCase):
         self.assertEqual(0, len(doc("article.questions select")))
 
     def test_truncated_text_is_stripped(self):
-        """Verify we strip html from truncated text."""
+        """Verify we escape html from truncated content in the question list."""
         long_str = "".join(random.choice(ascii_letters) for x in range(170))
         QuestionFactory(content="<p>{}</p>".format(long_str))
         response = self.client.get(reverse("questions.list", args=["all"]))
 
-        # Verify that the <p> was stripped
-        assert b'<p class="short-text"><p>' not in response.content
-        assert b'<p class="short-text">%s' % long_str[:5].encode() in response.content
+        # Verify that the <p> tags from content are escaped, not injected as raw HTML
+        assert b'<p class="question-entry--excerpt"><p>' not in response.content
+        assert long_str[:5].encode() in response.content
 
     def test_views(self):
-        """Verify the view count is displayed correctly."""
+        """View counts are not displayed in the question list."""
         q = QuestionFactory()
         q.questionvisits_set.create(visits=1007)
         response = self.client.get(reverse("questions.list", args=["all"]))
-        doc = pq(response.content)
-        self.assertEqual("1007", doc(".views-val").text())
+        self.assertEqual(200, response.status_code)
 
     def test_no_unarchive_on_old_questions(self):
         ques = QuestionFactory(created=(timezone.now() - timedelta(days=200)), is_archived=True)
@@ -1218,7 +1217,7 @@ class QuestionsTemplateTestCaseNoFixtures(TestCase):
         url = urlparams(url, filter="no-replies")
         response = self.client.get(url)
         doc = pq(response.content)
-        self.assertEqual(2, len(doc(".forum--question-item")))
+        self.assertEqual(2, len(doc(".question-entry")))
 
 
 class QuestionEditingTests(TestCase):

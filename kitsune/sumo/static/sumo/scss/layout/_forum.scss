@@ -2,104 +2,6 @@
 @use 'protocol/css/includes/lib' as p;
 
 .forum {
-  &--question-item {
-    display: flex;
-    flex-direction: column;
-    padding: p.$spacing-lg 0;
-    border-bottom: 1px solid var(--color-heading);
-
-    &:first-child {
-      padding-top: 0;
-    }
-  }
-
-  &--content {
-    flex: 1 1 auto;
-  }
-
-  &--question-item-heading {
-    @include c.text-body-md;
-  }
-
-  &--question-item-side {
-    flex: 0 0 100%;
-    display: flex;
-
-    li {
-      position: relative;
-      width: p.$spacing-2xl;
-      display: flex;
-      justify-content: center;
-      padding: 0 12px;
-      border-right: 1px solid var(--color-border);
-      color: var(--color-marketing-gray-05);
-      text-align: center;
-
-      &:last-child {
-        border: 0 none;
-      }
-
-      &.thread-solved {
-        color: var(--color-success);
-      }
-
-      .hover-label {
-        opacity: 0;
-        will-change: opacity, transform;
-        padding: 2px 6px;
-        @include c.text-body-xs;
-        background: var(--color-inverse-bg);
-        color: var(--color-inverse);
-        border-radius: var(--global-radius);
-        position: absolute;
-        top: 100%;
-        left: 50%;
-        transform: translate(-50%, 0);
-        transition: opacity .2s linear, transform .2s linear;
-        z-index: 2;
-      }
-
-      &:hover {
-        .hover-label {
-          display: block;
-          opacity: 1;
-          transform: translate(-50%, 10%);
-        }
-      }
-    }
-
-    svg {
-      width: 20px;
-      height: 20px;
-    }
-  }
-
-  &--user-meta {
-    display: flex;
-    flex-wrap: wrap;
-    padding-top: p.$spacing-md;
-    border-top: 1px solid var(--color-border);
-    @include c.text-body-sm;
-
-    p {
-      margin: 0 p.$spacing-lg 0 0;
-
-      &:last-child {
-        margin-right: 0;
-      }
-    }
-
-    a {
-      text-decoration: none;
-      color: var(--color-heading);
-
-      &:hover {
-        color: var(--color-heading);
-        text-decoration: underline;
-      }
-    }
-  }
-
   &--sidebar-sort {
     margin-bottom: 40px;
   }
@@ -174,45 +76,6 @@
   }
 
   @media #{p.$mq-md} {
-    &--question-item {
-      flex-direction: row;
-      padding-top: p.$spacing-xl;
-      padding-bottom: p.$spacing-xl;
-    }
-
-    &--question-item-side {
-      flex: 0 0 70px;
-      flex-direction: column;
-
-      li {
-        padding: 12px 0;
-        border-right: 0 none;
-        border-bottom: 1px solid var(--color-border);
-
-        &:first-child {
-          padding-top: 0;
-
-          .hover-label {
-            top: 0;
-          }
-        }
-
-        &:last-child {
-          padding-bottom: 0;
-        }
-
-        .hover-label {
-          top: 12px;
-          left: 90%;
-          transform: translateX(-25%);
-        }
-
-        &:hover .hover-label {
-          transform: translateX(-10%);
-        }
-      }
-    }
-
     &--masthead-cta {
       display: flex;
       justify-content: flex-end;
@@ -246,6 +109,181 @@
   .mzp-c-menu-list,
   .content-raw {
     display: none;
+  }
+}
+
+// Sidebar tag filter
+.sidebar-tags {
+  margin-top: p.$spacing-xs;
+
+  &--search {
+    width: 100%;
+    padding: p.$spacing-xs p.$spacing-sm;
+    border: 1px solid var(--color-text-light);
+    border-radius: var(--global-radius);
+    font-family: inherit;
+    @include c.text-body-sm;
+    color: var(--color-text);
+    background: var(--color-white);
+    margin-bottom: p.$spacing-xs;
+    outline: none;
+    box-sizing: border-box;
+
+    &:focus {
+      border-color: var(--color-link);
+      box-shadow: 0 0 0 2px rgba(0, 96, 223, 0.15);
+    }
+
+    &::placeholder {
+      color: var(--color-text-light);
+    }
+  }
+
+  &--list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+
+    li.is-hidden {
+      display: none;
+    }
+
+    a {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: p.$spacing-xs p.$spacing-sm;
+      border-radius: var(--global-radius);
+      @include c.text-body-sm;
+      color: var(--color-text);
+      text-decoration: none;
+
+      &:hover {
+        background: rgba(0, 0, 0, 0.07);
+        color: var(--color-heading);
+      }
+    }
+
+    li.is-selected > a {
+      background: var(--color-link-active-bg);
+      font-weight: bold;
+      color: var(--color-heading);
+
+      .sidebar-tags--count {
+        background: rgba(0, 96, 223, 0.12);
+        color: var(--color-link);
+      }
+    }
+  }
+
+  &--count {
+    @include c.text-body-xs;
+    color: var(--color-text-light);
+    background: var(--color-light-gray-03);
+    border-radius: 20px;
+    padding: 1px p.$spacing-sm;
+    min-width: 22px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  &--no-results {
+    @include c.text-body-sm;
+    color: var(--color-text-light);
+    padding: p.$spacing-xs p.$spacing-sm;
+    margin: 0;
+  }
+
+  &--show-more {
+    appearance: none;
+    background: none;
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: p.$spacing-xs;
+    padding: p.$spacing-xs p.$spacing-sm;
+    margin-top: p.$spacing-xs;
+    @include c.text-body-sm;
+    color: var(--color-link);
+    cursor: pointer;
+    border-radius: var(--global-radius);
+    width: 100%;
+    text-align: left;
+
+    &:hover {
+      text-decoration: underline;
+    }
+
+    svg {
+      width: 12px;
+      height: 12px;
+      flex-shrink: 0;
+    }
+  }
+}
+
+.sidebar-tags-active {
+  margin-bottom: p.$spacing-sm;
+
+  &--header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: p.$spacing-xs;
+  }
+
+  &--label {
+    @include c.text-body-xs;
+    color: var(--color-text-light);
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  &--clear {
+    @include c.text-body-xs;
+    color: var(--color-text-light);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--color-error);
+      text-decoration: underline;
+    }
+  }
+
+  &--chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: p.$spacing-xs;
+  }
+}
+
+.sidebar-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: p.$spacing-xs;
+  padding: 2px 4px 2px p.$spacing-sm;
+  background: var(--color-link-active-bg);
+  color: var(--color-link);
+  border-radius: 20px;
+  @include c.text-body-xs;
+  font-weight: bold;
+
+  &--remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    color: inherit;
+    text-decoration: none;
+    font-size: 14px;
+    line-height: 1;
+
+    &:hover {
+      background: rgba(0, 96, 223, 0.15);
+    }
   }
 }
 

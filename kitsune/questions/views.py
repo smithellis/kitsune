@@ -12,7 +12,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.sites.models import Site
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import EmptyPage, PageNotAnInteger
-from django.db.models import Exists, F, OuterRef, Q
+from django.db.models import Count, Exists, F, OuterRef, Q
 from django.db.models.functions import Now
 from django.http import (
     Http404,
@@ -256,8 +256,6 @@ def question_list(request, product_slug=None, topic_slug=None):
         "topic",
         "product",
     )
-    # Exclude questions over 90 days old without an answer or older than 2 years or created
-    # by deactivated users. Use "__range" to ensure the database index is used in Postgres.
     today = date.today()
     question_qs = (
         question_qs.exclude(
@@ -295,22 +293,6 @@ def question_list(request, product_slug=None, topic_slug=None):
         ),
     )
 
-    if tagged:
-        tag_slugs = tagged.split(",")
-        tags = SumoTag.objects.active().filter(slug__in=tag_slugs)
-        if tags:
-            for t in tags:
-                question_qs = question_qs.filter(tags__name__in=[t.name])
-            if len(tags) == 1:
-                feed_urls += (
-                    (
-                        reverse("questions.tagged_feed", args=[tags[0].slug]),
-                        TaggedQuestionsFeed().title(tags[0]),
-                    ),
-                )
-        else:
-            question_qs = Question.objects.none()
-
     # Filter by products.
     if products:
         question_qs = question_qs.filter(product__in=products)
@@ -329,6 +311,38 @@ def question_list(request, product_slug=None, topic_slug=None):
         locale_query |= Q(locale=settings.WIKI_DEFAULT_LANGUAGE)
 
     question_qs = question_qs.filter(locale_query)
+
+    # Snapshot before tag filtering so available_tags reflects the full set
+    # for the current product/topic/locale context, not a narrowed subset.
+    base_qs = question_qs
+
+    # Apply tag filter.
+    if tagged:
+        tag_slugs = tagged.split(",")
+        tags = SumoTag.objects.active().filter(slug__in=tag_slugs)
+        if tags:
+            for t in tags:
+                question_qs = question_qs.filter(tags__name__in=[t.name])
+            if len(tags) == 1:
+                feed_urls += (
+                    (
+                        reverse("questions.tagged_feed", args=[tags[0].slug]),
+                        TaggedQuestionsFeed().title(tags[0]),
+                    ),
+                )
+        else:
+            question_qs = Question.objects.none()
+
+    # Top 50 tags from the pre-tag-filtered set, ordered by frequency.
+    # Force evaluation here so the template receives a plain list, avoiding
+    # lazy queryset double-evaluation issues.
+    available_tags = list(
+        Question.objects.filter(pk__in=base_qs.values("pk").distinct(), tags__isnull=False)
+        .values("tags__name", "tags__slug")
+        .annotate(count=Count("id", distinct=True))
+        .order_by("-count")[:50]
+    )
+    tagged_set = set(tagged.split(",")) if tagged else set()
 
     # Set the order.
     # Set a default value if a user requested a non existing order parameter
@@ -380,6 +394,10 @@ def question_list(request, product_slug=None, topic_slug=None):
     if request.user.is_authenticated:
         request.session["questions_owner"] = owner
 
+    is_forum_moderator = request.user.is_authenticated and request.user.groups.filter(
+        name=settings.FORUM_MODERATORS_GROUP
+    ).exists()
+
     data = {
         "questions": questions_page,
         "feeds": feed_urls,
@@ -392,6 +410,8 @@ def question_list(request, product_slug=None, topic_slug=None):
         "sort": sort,
         "tags": tags,
         "tagged": tagged,
+        "tagged_set": tagged_set,
+        "available_tags": available_tags,
         "recent_asked_count": recent_asked_count,
         "recent_unanswered_count": recent_unanswered_count,
         "recent_answered_percent": recent_answered_percent,
@@ -406,6 +426,7 @@ def question_list(request, product_slug=None, topic_slug=None):
         "product_slug": product_slug,
         "topic_navigation": topic_navigation,
         "has_support_config": product_with_aaq,
+        "is_forum_moderator": is_forum_moderator,
     }
 
     if products:

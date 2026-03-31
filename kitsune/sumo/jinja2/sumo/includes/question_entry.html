@@ -1,0 +1,175 @@
+{# Shared question/ticket entry component.
+   Accepts any object that exposes: title, content, channel,
+   get_absolute_url(), product, topic, created.
+   Both Question and SupportTicket satisfy this interface.
+
+   Usage:
+     {% from "sumo/includes/question_entry.html" import question_entry %}
+     {{ question_entry(question) }}
+     {{ question_entry(question, profile_username=profile.user.username) }}
+#}
+
+{% set _forum_icon %}
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </svg>
+{% endset %}
+
+{% set _ticket_icon %}
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="4" width="20" height="16" rx="2"/>
+    <polyline points="2,4 12,13 22,4"/>
+  </svg>
+{% endset %}
+
+{% macro reply_count(question) %}
+  {% if question.num_answers %}
+    {% set _reply_tip %}{% trans count=question.num_answers %}{{ count }} reply{% pluralize %}{{ count }} replies{% endtrans %}{% endset %}
+    <span class="status-label status-label--neutral question-entry--reply-count"
+          title="{{ _reply_tip }}">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      {{ question.num_answers }}
+    </span>
+  {% endif %}
+{% endmacro %}
+
+{% macro vote_count(question) %}
+  {% if question.num_votes_past_week %}
+    {% set _vote_tip %}{% trans count=question.num_votes_past_week %}{{ count }} person has this problem{% pluralize %}{{ count }} people have this problem{% endtrans %}{% endset %}
+    <span class="status-label status-label--neutral question-entry--vote-count"
+          title="{{ _vote_tip }}">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+      {{ question.num_votes_past_week }}
+    </span>
+  {% endif %}
+{% endmacro %}
+
+{% macro question_entry(question, profile_username=None) %}
+  {% set _base_url = url('users.questions', username=profile_username) if (question.channel == "direct_support" and profile_username) else None %}
+  {% if _base_url %}
+    {% set _product_url = (_base_url + '?channel=direct_support&product=' + question.product.slug) if question.product else None %}
+    {% set _topic_url = (_base_url + '?channel=direct_support&topic=' + question.topic.slug) if question.topic else None %}
+  {% else %}
+    {% set _product_url = url('questions.list', product_slug=question.product.slug) if question.product else None %}
+    {% set _topic_url = url('questions.list_by_topic', topic_slug=question.topic.slug) if question.topic else None %}
+  {% endif %}
+
+  <div class="question-entry--link">
+    <div class="question-entry--icon" aria-hidden="true">
+      {{ (_ticket_icon if question.channel == "direct_support" else _forum_icon) | safe }}
+    </div>
+    <div class="question-entry--body">
+      <h3 class="question-entry--title">
+        <a href="{{ question.get_absolute_url() }}" class="question-entry--title-link">{{ question.title }}</a>
+      </h3>
+      {% if question.content %}
+        <p class="question-entry--excerpt">{{ question.content | truncate(170) }}</p>
+      {% endif %}
+      <div class="question-entry--meta">
+        {% if question.product and _product_url %}
+          <a class="question-entry--meta-item"
+             href="{{ _product_url }}"
+             title="{{ _('{product} questions')|f(product=question.product.title) }}">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 aria-hidden="true">
+              <rect x="2" y="3" width="7" height="7"/><rect x="15" y="3" width="7" height="7"/>
+              <rect x="2" y="14" width="7" height="7"/><rect x="15" y="14" width="7" height="7"/>
+            </svg>
+            {{ question.product.title }}
+          </a>
+        {% endif %}
+        {% if question.topic and _topic_url %}
+          <a class="question-entry--meta-item"
+             href="{{ _topic_url }}"
+             title="{{ _('{topic} questions')|f(topic=question.topic.title) }}">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 aria-hidden="true">
+              <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+              <line x1="7" y1="7" x2="7.01" y2="7"/>
+            </svg>
+            {{ question.topic.title }}
+          </a>
+        {% endif %}
+        <time datetime="{{ question.created.isoformat() }}">{{ question.created | timesince }}</time>
+        {% if question.channel != "direct_support" and question.last_answer %}
+          <span class="question-entry--meta-item">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <a href="{{ question.last_answer.get_absolute_url() }}" rel="nofollow">
+              {{- _('Last reply by {user} {when}')|f(user=display_name(question.last_answer.creator), when=question.last_answer.created|timesince) -}}
+            </a>
+          </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="question-entry--extras">
+    {% if question.channel == "direct_support" %}
+      <span class="my-questions--channel-badge my-questions--channel-badge--direct-support"
+            title="{{ _('This question was submitted via Direct Support') }}">
+        {{ _("Direct Support") }}
+      </span>
+      {% if question.zd_status == question.ZD_STATUS_SOLVED %}
+        {% set _status_class = "resolved" %}
+        {% set _status_tooltip = _("Your ticket has been resolved") %}
+      {% elif question.zd_status == question.ZD_STATUS_CLOSED %}
+        {% set _status_class = "neutral" %}
+        {% set _status_tooltip = _("Your ticket has been closed") %}
+      {% elif question.zd_status == question.ZD_STATUS_OPEN %}
+        {% set _status_class = "open" %}
+        {% set _status_tooltip = _("Your ticket is open and being reviewed by our team") %}
+      {% elif question.zd_status == question.ZD_STATUS_PENDING %}
+        {% set _status_class = "pending" %}
+        {% set _status_tooltip = _("Our team has responded and is awaiting your reply") %}
+      {% elif question.zd_status == question.ZD_STATUS_WAITING %}
+        {% set _status_class = "pending" %}
+        {% set _status_tooltip = _("Your ticket is waiting for a response from our team") %}
+      {% else %}
+        {% set _status_class = "neutral" %}
+        {% set _status_tooltip = _("Your ticket has been submitted and is being processed") %}
+      {% endif %}
+      <span class="status-label status-label--{{ _status_class }}" title="{{ _status_tooltip }}">
+        {{ question.get_zd_status_display() or _("Submitted") }}
+      </span>
+    {% else %}
+      {% if question.solution %}
+        <span class="status-label status-label--resolved"
+              title="{{ _('This question has a verified solution') }}">{{ _("Solved") }}</span>
+      {% elif question.is_locked %}
+        <span class="status-label status-label--neutral"
+              title="{{ _('This question has been locked') }}">{{ _("Locked") }}</span>
+      {% elif question.is_archived %}
+        <span class="status-label status-label--neutral"
+              title="{{ _('This question has been archived') }}">{{ _("Archived") }}</span>
+      {% else %}
+        <span class="status-label status-label--open"
+              title="{{ _('This question is open and awaiting a reply') }}">{{ _("Open") }}</span>
+      {% endif %}
+      {{ reply_count(question) }}
+      {{ vote_count(question) }}
+      {% if question.is_spam %}
+        <span class="status-label status-label--pending"
+              title="{{ _('This question has been marked as spam') }}">{{ _("Spam") }}</span>
+      {% endif %}
+    {% endif %}
+  </div>
+{% endmacro %}

@@ -336,3 +336,68 @@ function initReplyToAnswer() {
 }
 
 $(init);
+
+const TAGS_INITIAL_LIMIT = 10;
+const TAGS_PAGE_SIZE = 20;
+const TAGS_MAX_LIMIT = 50;
+
+function initSidebarTagFilter() {
+  const container = document.querySelector("#sidebar-tag-filter");
+  if (!container || container.dataset.initialized) return;
+  container.dataset.initialized = "true";
+
+  const searchInput = container.querySelector(".sidebar-tags--search");
+  const noResults = container.querySelector(".sidebar-tags--no-results");
+  const showMoreBtn = container.querySelector(".sidebar-tags--show-more");
+  const tagItems = container.querySelectorAll(".sidebar-tags--list li");
+  const total = parseInt(container.dataset.total || "0", 10);
+  const maxLimit = Math.min(total, TAGS_MAX_LIMIT);
+  let limit = parseInt(container.dataset.initialLimit || TAGS_INITIAL_LIMIT, 10);
+
+  function updateVisibility() {
+    const query = searchInput ? searchInput.value.toLowerCase() : "";
+    const searching = query.length > 0;
+    let visibleCount = 0;
+
+    tagItems.forEach(li => {
+      const show = searching ? (li.dataset.name || "").includes(query) : parseInt(li.dataset.rank, 10) < limit;
+      li.classList.toggle("is-hidden", !show);
+      if (show) visibleCount++;
+    });
+
+    if (noResults) {
+      noResults.hidden = !(searching && visibleCount === 0);
+    }
+
+    if (showMoreBtn) {
+      showMoreBtn.hidden = searching || limit >= maxLimit;
+      if (!showMoreBtn.hidden) {
+        const next = Math.min(limit + TAGS_PAGE_SIZE, maxLimit);
+        const textSpan = showMoreBtn.querySelector("span");
+        if (textSpan) {
+          textSpan.textContent = interpolate(
+            ngettext("Show %(n)s more tag", "Show %(n)s more tags", next - limit),
+            { n: next - limit },
+            true
+          );
+        }
+      }
+    }
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener("input", updateVisibility);
+  }
+
+  if (showMoreBtn) {
+    showMoreBtn.addEventListener("click", () => {
+      limit = Math.min(limit + TAGS_PAGE_SIZE, maxLimit);
+      updateVisibility();
+    });
+  }
+
+  updateVisibility();
+}
+
+document.addEventListener("DOMContentLoaded", initSidebarTagFilter);
+document.addEventListener("htmx:afterSettle", initSidebarTagFilter);

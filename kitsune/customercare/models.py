@@ -80,6 +80,25 @@ class SupportTicket(ModelBase):
         return f"Support Ticket: {self.subject} ({self.submission_status})"
 
     @property
+    def title(self):
+        return self.subject
+
+    @property
+    def content(self):
+        return self.description
+
+    @property
+    def channel(self):
+        return "direct_support"
+
+    def get_absolute_url(self):
+        return "#"  # no detail page yet
+
+    @property
+    def num_answers(self):
+        return len(self.comments)
+
+    @property
     def user_status(self):
         """Derive a user-facing status from submission_status and zd_status."""
         if self.submission_status == self.STATUS_REJECTED:

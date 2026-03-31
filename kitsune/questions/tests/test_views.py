@@ -368,7 +368,7 @@ class TestQuestionList(TestCase):
                 "Wrong number of results for {}".format(locale),
             )
             for substr in titles:
-                assert substr in doc(".forum--question-item-heading a").text()
+                assert substr in doc(".question-entry--title-link").text()
 
         # en-US and pt-BR are both in AAQ_LANGUAGES, so should be filtered.
         sub_test("en-US", "cupcakes?", "donuts?")

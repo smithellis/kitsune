@@ -160,6 +160,10 @@ class Question(AAQBase):
     def __str__(self):
         return self.title
 
+    @property
+    def channel(self):
+        return "forum"
+
     def set_needs_info(self):
         """Mark question as NEEDS_INFO."""
         self.tags.add(config.NEEDS_INFO_TAG_NAME)
