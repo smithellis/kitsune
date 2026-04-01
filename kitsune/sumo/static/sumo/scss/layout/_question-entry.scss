@@ -121,6 +121,17 @@
   }
 }
 
+.question-entry--view-count {
+  gap: p.$spacing-xs;
+  align-items: center;
+
+  svg {
+    width: p.$spacing-md;
+    height: p.$spacing-md;
+    flex-shrink: 0;
+  }
+}
+
 .question-entry--extras {
   position: relative;
   z-index: 1;
