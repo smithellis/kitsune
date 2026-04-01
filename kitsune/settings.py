@@ -1240,6 +1240,7 @@ ZENDESK_WEBHOOK_API_KEY_HEADER_NAME = config(
     "ZENDESK_WEBHOOK_API_KEY_HEADER_NAME", default="zendesk-webhook-api-key"
 )
 ZENDESK_WEBHOOK_API_KEY = config("ZENDESK_WEBHOOK_API_KEY", default="")
+ZENDESK_COMMENTS_SYNC_THRESHOLD = config("ZENDESK_COMMENTS_SYNC_THRESHOLD", default=3600, cast=int)
 
 # Products that allow un-authenticated users to submit support requests
 LOGIN_EXCEPTIONS = frozenset(["mozilla-account"])

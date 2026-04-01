@@ -91,11 +91,17 @@ class SupportTicket(ModelBase):
         return "direct_support"
 
     def get_absolute_url(self):
+        if not self.user:
+            return None
         return reverse("customercare.ticket_detail", args=[self.user.username, self.id])
 
     @property
     def num_answers(self):
-        return len(self.comments)
+        return len(self.public_comments)
+
+    @property
+    def public_comments(self):
+        return [c for c in self.comments if c.get("public", False)]
 
     @property
     def user_status(self):

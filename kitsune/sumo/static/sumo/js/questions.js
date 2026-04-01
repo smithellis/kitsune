@@ -304,7 +304,7 @@ export function linkCrashIds(container) {
 * Initialize the automatic linking of crash IDs
 */
 function initCrashIdLinking() {
-  var postContents = $('.question .main-content, .answer .main-content, #more-system-details');
+  var postContents = $('.question .content, .answer .main-content, #more-system-details');
   postContents.each(function() {
     linkCrashIds($(this));
   });
