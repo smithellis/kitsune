@@ -67,13 +67,13 @@
 
 .question-entry--title {
   font-family: var(--heading-font-family);
-  @include c.text-body-lg;
+  @include c.text-body-md;
   font-weight: bold;
   margin: 0 0 p.$spacing-sm;
 }
 
 .question-entry--excerpt {
-  @include c.text-body-lg;
+  @include c.text-body-md;
   color: var(--color-text-light);
   margin: 0 0 p.$spacing-md;
 }
