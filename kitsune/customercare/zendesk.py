@@ -181,3 +181,11 @@ class ZendeskClient:
         else:
             ticket.requester_id = self.create_user(user, email=ticket_fields.get("email", "")).id
         return self.client.tickets.create(ticket)
+
+    def get_ticket(self, ticket_id):
+        """Fetch a single ticket from Zendesk by ID."""
+        return self.client.tickets(id=ticket_id)
+
+    def get_ticket_comments(self, ticket_id):
+        """Fetch all comments for a ticket from Zendesk."""
+        return list(self.client.tickets.comments(ticket=ticket_id))

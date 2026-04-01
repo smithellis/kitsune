@@ -367,3 +367,33 @@ class ZendeskClientTests(TestCase):
         call_args = mock_client.tickets.create.call_args[0][0]
 
         self.assertFalse(hasattr(call_args, "brand_id") and call_args.brand_id)
+
+    @patch("kitsune.customercare.zendesk.Zenpy")
+    def test_get_ticket(self, mock_zenpy):
+        """Test that get_ticket fetches a ticket by ID."""
+        mock_client = Mock()
+        mock_zenpy.return_value = mock_client
+        mock_ticket = Mock(id=123, status="open", subject="Test ticket")
+        mock_client.tickets.return_value = mock_ticket
+
+        client = ZendeskClient()
+        result = client.get_ticket(123)
+
+        mock_client.tickets.assert_called_once_with(id=123)
+        self.assertEqual(result, mock_ticket)
+
+    @patch("kitsune.customercare.zendesk.Zenpy")
+    def test_get_ticket_comments(self, mock_zenpy):
+        """Test that get_ticket_comments returns a list of comments."""
+        mock_client = Mock()
+        mock_zenpy.return_value = mock_client
+        mock_comments = [Mock(body="First comment"), Mock(body="Second comment")]
+        mock_client.tickets.comments.return_value = iter(mock_comments)
+
+        client = ZendeskClient()
+        result = client.get_ticket_comments(456)
+
+        mock_client.tickets.comments.assert_called_once_with(ticket=456)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0].body, "First comment")
+        self.assertEqual(result[1].body, "Second comment")
