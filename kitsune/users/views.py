@@ -226,6 +226,10 @@ def questions_contributed(request, username):
     product_slug = request.GET.get("product")
     topic_slug = request.GET.get("topic")
 
+    is_owner = request.user == profile.user
+    if not is_owner and channel == "direct_support":
+        raise Http404()
+
     if channel != "direct_support":
         forum_questions = (
             profile.user.questions.filter(is_spam=False)
@@ -239,20 +243,19 @@ def questions_contributed(request, username):
     else:
         forum_questions = profile.user.questions.none()
 
-    if channel != "forum":
-        support_tickets = (
-            SupportTicket.objects.filter(
-                user=profile.user, submission_status=SupportTicket.STATUS_SENT
-            )
-            .select_related("product", "topic")
-            .order_by("-created")
+    support_tickets = (
+        SupportTicket.objects.filter(
+            user=profile.user, submission_status=SupportTicket.STATUS_SENT
         )
-        if product_slug:
-            support_tickets = support_tickets.filter(product__slug=product_slug)
-        if topic_slug:
-            support_tickets = support_tickets.filter(topic__slug=topic_slug)
-    else:
-        support_tickets = SupportTicket.objects.none()
+        .select_related("product", "topic")
+        .order_by("-created")
+        if is_owner and channel != "forum"
+        else SupportTicket.objects.none()
+    )
+    if product_slug:
+        support_tickets = support_tickets.filter(product__slug=product_slug)
+    if topic_slug:
+        support_tickets = support_tickets.filter(topic__slug=topic_slug)
 
     combined = sorted(
         itertools.chain(forum_questions, support_tickets),

@@ -14,6 +14,7 @@
       {% endif %}
     </h2>
 
+    {% if is_owner %}
     <nav class="tabs">
       <ul class="tabs--list">
         <li class="tabs--item">
@@ -27,6 +28,7 @@
         </li>
       </ul>
     </nav>
+    {% endif %}
 
     {% if not questions %}
       <p class="my-questions--empty">
