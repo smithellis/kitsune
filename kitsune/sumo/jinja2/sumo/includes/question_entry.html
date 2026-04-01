@@ -65,7 +65,7 @@
     {% set _topic_url = (_base_url + '?channel=direct_support&topic=' + question.topic.slug) if question.topic else None %}
   {% else %}
     {% set _product_url = url('questions.list', product_slug=question.product.slug) if question.product else None %}
-    {% set _topic_url = url('questions.list_by_topic', topic_slug=question.topic.slug) if question.topic else None %}
+    {% set _topic_url = (_product_url + '?topic=' + question.topic.slug) if (question.topic and _product_url) else (url('questions.list_by_topic', topic_slug=question.topic.slug) if question.topic else None) %}
   {% endif %}
 
   <div class="question-entry--link">
