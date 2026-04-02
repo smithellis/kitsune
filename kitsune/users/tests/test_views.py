@@ -12,6 +12,7 @@ from django.test.utils import override_settings
 from josepy import jwa, jwk, jws
 from pyquery import PyQuery as pq
 
+from kitsune.customercare.tests import SupportTicketFactory
 from kitsune.forums.models import Post, Thread
 from kitsune.forums.tests import PostFactory, ThreadFactory
 from kitsune.kbforums.models import Post as KBForumPost
@@ -714,3 +715,45 @@ class UserCloseAccountTests(TestCase):
         # The user should be completely deleted
         with self.assertRaises(User.DoesNotExist):
             self.user.refresh_from_db()
+
+
+class QuestionsContributedTests(TestCase):
+    def setUp(self):
+        self.owner = UserFactory()
+        self.other = UserFactory()
+        self.ticket = SupportTicketFactory(user=self.owner)
+        self.url = reverse("users.questions", locale="en-US", kwargs={"username": self.owner.username})
+
+    def _get(self, user=None, channel=None):
+        if user:
+            self.client.login(username=user.username, password="testpass")
+        params = f"?channel={channel}" if channel else ""
+        return self.client.get(self.url + params)
+
+    def test_owner_sees_ticket(self):
+        response = self._get(user=self.owner, channel="direct_support")
+        self.assertEqual(200, response.status_code)
+        self.assertContains(response, self.ticket.subject)
+
+    def test_owner_sees_ticket_on_all_tab(self):
+        response = self._get(user=self.owner)
+        self.assertEqual(200, response.status_code)
+        self.assertContains(response, self.ticket.subject)
+
+    def test_other_user_direct_support_returns_404(self):
+        response = self._get(user=self.other, channel="direct_support")
+        self.assertEqual(404, response.status_code)
+
+    def test_anonymous_direct_support_returns_404(self):
+        response = self._get(channel="direct_support")
+        self.assertEqual(404, response.status_code)
+
+    def test_other_user_does_not_see_ticket(self):
+        response = self._get(user=self.other)
+        self.assertEqual(200, response.status_code)
+        self.assertNotContains(response, self.ticket.subject)
+
+    def test_anonymous_does_not_see_ticket(self):
+        response = self._get()
+        self.assertEqual(200, response.status_code)
+        self.assertNotContains(response, self.ticket.subject)
