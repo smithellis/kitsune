@@ -123,6 +123,19 @@
   }
 }
 
+.question-entry--meta-asked-by {
+  position: relative;
+  z-index: 1;
+  color: var(--color-heading);
+  font-weight: 600;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+    color: var(--color-link);
+  }
+}
+
 .question-entry--last-reply {
   display: inline-flex;
   align-items: center;
@@ -181,6 +194,6 @@
   align-items: center;
   gap: p.$spacing-xs p.$spacing-sm;
   margin-top: p.$spacing-md;
-  @include c.text-body-xs;
+  @include c.text-body-sm;
   color: var(--color-text-light);
 }

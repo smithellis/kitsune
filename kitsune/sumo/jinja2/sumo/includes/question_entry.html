@@ -74,7 +74,7 @@
   {% endif %}
 {% endmacro %}
 
-{% macro question_entry(question, profile_username=None) %}
+{% macro question_entry(question, profile_username=None, request=None) %}
   {% set _base_url = url('users.questions', username=profile_username) if (question.channel == "direct_support" and profile_username) else None %}
   {% if _base_url %}
     {% set _product_url = (_base_url + '?channel=direct_support&product=' + question.product.slug) if question.product else None %}
@@ -177,15 +177,21 @@
         {{ question.topic.title }}
       </a>
     {% endif %}
-    <a class="question-entry--meta-item" href="{{ question.get_absolute_url() }}"
-       title="{{ _('Asked {when}')|f(when=question.created|timesince) }}">
+    <span class="question-entry--meta-item">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
            aria-hidden="true">
         <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
       </svg>
-      <time datetime="{{ question.created.isoformat() }}">{{ _('asked {when}')|f(when=question.created|timesince) }}</time>
-    </a>
+      {% if is_contributor(request.user) and not profile_username %}
+        {{ _('asked by') }} <a class="question-entry--meta-asked-by"
+           href="{{ url('users.profile', question.creator.id) }}"
+           title="{{ display_name(question.creator) }}">{{ display_name(question.creator)|truncate(20) }}</a>
+        <time datetime="{{ question.created.isoformat() }}">{{ question.created|timesince }}</time>
+      {% else %}
+        <time datetime="{{ question.created.isoformat() }}">{{ _('asked {when}')|f(when=question.created|timesince) }}</time>
+      {% endif %}
+    </span>
     {% if question.channel != "direct_support" and question.last_answer %}
       <span class="question-entry--last-reply"
             title="{{ _('Last reply by {user}')|f(user=display_name(question.last_answer.creator)) }}">

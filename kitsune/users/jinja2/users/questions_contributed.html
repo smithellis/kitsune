@@ -42,7 +42,7 @@
       <ul class="question-entry-list">
         {% for question in questions %}
           <li class="question-entry">
-            {{ question_entry(question, profile_username=profile.user.username) }}
+            {{ question_entry(question, profile_username=profile.user.username, request=request) }}
           </li>
         {% endfor %}
       </ul>

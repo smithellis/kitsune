@@ -200,7 +200,7 @@
         <section class="forum--question-list questions">
           {% for question in questions.object_list %}
             <article id="question-{{ question.id }}" class="question-entry">
-              {{ question_entry(question) }}
+              {{ question_entry(question, request=request) }}
             </article>
           {% endfor %}
         </section>
