@@ -75,16 +75,7 @@
 .question-entry--excerpt {
   @include c.text-body-md;
   color: var(--color-text-light);
-  margin: 0 0 p.$spacing-md;
-}
-
-.question-entry--meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: p.$spacing-xs p.$spacing-sm;
-  @include c.text-body-xs;
-  color: var(--color-text-light);
+  margin: 0;
 }
 
 .question-entry--meta-item {
@@ -132,6 +123,31 @@
   }
 }
 
+.question-entry--last-reply {
+  display: inline-flex;
+  align-items: center;
+  gap: p.$spacing-xs;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.question-entry--last-reply-name {
+  color: var(--color-heading);
+  font-weight: 600;
+}
+
+.question-entry--last-reply-time {
+  position: relative;
+  z-index: 1;
+  color: var(--color-text-light);
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+    color: var(--color-link);
+  }
+}
+
 .question-entry--extras {
   position: relative;
   z-index: 1;
@@ -148,4 +164,15 @@
   .my-questions--channel-badge {
     @include c.text-body-md;
   }
+}
+
+.question-entry--meta {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: p.$spacing-xs p.$spacing-sm;
+  margin-top: p.$spacing-md;
+  @include c.text-body-xs;
+  color: var(--color-text-light);
 }
