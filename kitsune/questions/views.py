@@ -70,7 +70,7 @@ from kitsune.sumo.utils import (
     set_aaq_context,
     simple_paginate,
 )
-from kitsune.tags.models import SumoTag
+from kitsune.tags.models import SumoTag, SumoTaggedItem
 from kitsune.tags.utils import add_existing_tag
 from kitsune.tidings.events import ActivationRequestFailed
 from kitsune.tidings.models import Watch
@@ -318,11 +318,20 @@ def question_list(request, product_slug=None, topic_slug=None):
 
     # Apply tag filter.
     if tagged:
-        tag_slugs = tagged.split(",")
+        tag_slugs = tagged.split(",")[:10]
         tags = SumoTag.objects.active().filter(slug__in=tag_slugs)
         if tags:
+            ct = ContentType.objects.get_for_model(Question)
             for t in tags:
-                question_qs = question_qs.filter(tags__name__in=[t.name])
+                question_qs = question_qs.filter(
+                    Exists(
+                        SumoTaggedItem.objects.filter(
+                            object_id=OuterRef("pk"),
+                            content_type=ct,
+                            tag=t,
+                        )
+                    )
+                )
             if len(tags) == 1:
                 feed_urls += (
                     (

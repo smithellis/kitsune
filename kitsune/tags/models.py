@@ -40,3 +40,8 @@ class SumoTag(TagBase):
 
 class SumoTaggedItem(GenericTaggedItemBase):
     tag = models.ForeignKey(SumoTag, related_name="tagged_items", on_delete=models.CASCADE)
+
+    class Meta(GenericTaggedItemBase.Meta):
+        indexes = [
+            models.Index(fields=["content_type", "tag", "object_id"]),
+        ]
