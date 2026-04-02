@@ -173,10 +173,12 @@
       {% if question.is_locked %}
         <span class="status-label status-label--neutral"
               title="{{ _('This question has been locked') }}">{{ _("Locked") }}</span>
-      {% elif question.is_archived %}
+      {% endif %}
+      {% if question.is_archived %}
         <span class="status-label status-label--neutral"
               title="{{ _('This question has been archived') }}">{{ _("Archived") }}</span>
-      {% elif not question.solution %}
+      {% endif %}
+      {% if not question.is_locked and not question.is_archived and not question.solution %}
         <span class="status-label status-label--open"
               title="{{ _('This question is open and awaiting a reply') }}">{{ _("Open") }}</span>
       {% endif %}
