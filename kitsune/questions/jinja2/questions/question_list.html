@@ -120,17 +120,34 @@
 {% endblock %}
 
 {% block content %}
-{% if tags %}
-  <div id="tagged" class="tag-notification">
+<div id="tagged">
+  {% if tags %}
+  <div class="tag-notification">
     {{ _('Showing questions tagged:') }}
     <ul class="tag-list">
       {% for tag in tags -%}
       <li><a class="tag" href="{{ questions_url(tagged=tags_to_text (tags|remove(tag))) }}">{{ tag.name }}</a></li>
       {%- endfor %}
     </ul>
-    <a class="show-all" href="{{ questions_url(tagged=None) }}">{{ _('Show all questions') }}</a>
+    <a class="tag-notification--clear"
+       href="{{ questions_url(tagged=None) }}"
+       hx-get="{{ questions_url(tagged=None) }}"
+       hx-target="#questions-list"
+       hx-select="#questions-list"
+       hx-select-oob="#sidebar-tag-filter,#tagged"
+       hx-swap="outerHTML"
+       hx-push-url="true"
+       title="{{ _('Clear all tag filters') }}" aria-label="{{ _('Clear all tag filters') }}">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+           aria-hidden="true">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </a>
   </div>
-{% endif %}
+  {% endif %}
+</div>
 
 <nav id="owner-tabs" class="tabs">
     <ul class="tabs--list subtopics">
@@ -264,7 +281,7 @@
                      hx-get="{{ questions_url(tagged=None, page=None) }}"
                      hx-target="#questions-list"
                      hx-select="#questions-list"
-                     hx-select-oob="#sidebar-tag-filter"
+                     hx-select-oob="#sidebar-tag-filter,#tagged"
                      hx-swap="outerHTML"
                      hx-push-url="true">{{ _('Clear all') }}</a>
                 </div>
@@ -278,10 +295,17 @@
                          hx-get="{{ questions_url(tagged=remaining or None, page=None) }}"
                          hx-target="#questions-list"
                          hx-select="#questions-list"
-                         hx-select-oob="#sidebar-tag-filter"
+                         hx-select-oob="#sidebar-tag-filter,#tagged"
                          hx-swap="outerHTML"
                          hx-push-url="true"
-                         title="{{ _('{tag} — click to remove')|f(tag=tag.name) }}">×</a>
+                         title="{{ _('{tag} — click to remove')|f(tag=tag.name) }}" aria-label="{{ _('{tag} — click to remove')|f(tag=tag.name) }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                             aria-hidden="true">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </a>
                     </span>
                   {% endfor %}
                 </div>
@@ -310,7 +334,7 @@
                      hx-get="{{ _tag_url }}"
                      hx-target="#questions-list"
                      hx-select="#questions-list"
-                     hx-select-oob="#sidebar-tag-filter"
+                     hx-select-oob="#sidebar-tag-filter,#tagged"
                      hx-swap="outerHTML"
                      hx-push-url="true">
                     <span>{{ tag_data.tags__name }}</span>

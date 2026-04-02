@@ -354,6 +354,8 @@ function initSidebarTagFilter() {
   const maxLimit = Math.min(total, TAGS_MAX_LIMIT);
   let limit = parseInt(container.dataset.initialLimit || TAGS_INITIAL_LIMIT, 10);
 
+  const initialLimit = limit;
+
   function updateVisibility() {
     const query = searchInput ? searchInput.value.toLowerCase() : "";
     const searching = query.length > 0;
@@ -370,11 +372,19 @@ function initSidebarTagFilter() {
     }
 
     if (showMoreBtn) {
-      showMoreBtn.hidden = searching || limit >= maxLimit;
-      if (!showMoreBtn.hidden) {
-        const next = Math.min(limit + TAGS_PAGE_SIZE, maxLimit);
-        const textSpan = showMoreBtn.querySelector("span");
-        if (textSpan) {
+      const expanded = limit >= maxLimit;
+      showMoreBtn.hidden = searching || (total <= initialLimit);
+      showMoreBtn.classList.toggle("is-expanded", expanded);
+      const textSpan = showMoreBtn.querySelector("span");
+      if (textSpan) {
+        if (expanded) {
+          textSpan.textContent = interpolate(
+            ngettext("Hide %(n)s tag", "Hide %(n)s tags", maxLimit - initialLimit),
+            { n: maxLimit - initialLimit },
+            true
+          );
+        } else {
+          const next = Math.min(limit + TAGS_PAGE_SIZE, maxLimit);
           textSpan.textContent = interpolate(
             ngettext("Show %(n)s more tag", "Show %(n)s more tags", next - limit),
             { n: next - limit },
@@ -391,7 +401,7 @@ function initSidebarTagFilter() {
 
   if (showMoreBtn) {
     showMoreBtn.addEventListener("click", () => {
-      limit = Math.min(limit + TAGS_PAGE_SIZE, maxLimit);
+      limit = limit >= maxLimit ? initialLimit : Math.min(limit + TAGS_PAGE_SIZE, maxLimit);
       updateVisibility();
     });
   }
