@@ -77,3 +77,4 @@ chromedriver.log
 gcloud/
 .claude
 .copilot
+.superpowers
