@@ -177,7 +177,8 @@
         {{ question.topic.title }}
       </a>
     {% endif %}
-    <a class="question-entry--meta-item" href="{{ question.get_absolute_url() }}">
+    <a class="question-entry--meta-item" href="{{ question.get_absolute_url() }}"
+       title="{{ _('Asked {when}')|f(when=question.created|timesince) }}">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
            aria-hidden="true">
@@ -186,13 +187,15 @@
       <time datetime="{{ question.created.isoformat() }}">{{ _('asked {when}')|f(when=question.created|timesince) }}</time>
     </a>
     {% if question.channel != "direct_support" and question.last_answer %}
-      <span class="question-entry--last-reply">
+      <span class="question-entry--last-reply"
+            title="{{ _('Last reply by {user}')|f(user=display_name(question.last_answer.creator)) }}">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
              aria-hidden="true">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
         <span class="question-entry--last-reply-name">{{ display_name(question.last_answer.creator)|truncate(20) }}</span>
+        <span class="question-entry--last-reply-verb">{{ _('replied') }}</span>
         <a class="question-entry--last-reply-time" href="{{ question.last_answer.get_absolute_url() }}" rel="nofollow">{{ question.last_answer.created|timesince }}</a>
       </span>
     {% endif %}
