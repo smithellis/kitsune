@@ -136,6 +136,14 @@
   font-weight: 600;
 }
 
+.question-entry--last-reply-verb {
+  display: none;
+
+  @media #{p.$mq-md} {
+    display: inline;
+  }
+}
+
 .question-entry--last-reply-time {
   position: relative;
   z-index: 1;
