@@ -403,10 +403,6 @@ def question_list(request, product_slug=None, topic_slug=None):
     if request.user.is_authenticated:
         request.session["questions_owner"] = owner
 
-    is_forum_moderator = request.user.is_authenticated and request.user.groups.filter(
-        name=settings.FORUM_MODERATORS_GROUP
-    ).exists()
-
     data = {
         "questions": questions_page,
         "feeds": feed_urls,
@@ -435,7 +431,6 @@ def question_list(request, product_slug=None, topic_slug=None):
         "product_slug": product_slug,
         "topic_navigation": topic_navigation,
         "has_support_config": product_with_aaq,
-        "is_forum_moderator": is_forum_moderator,
     }
 
     if products:

@@ -235,7 +235,7 @@
   <nav class="sidebar-nav">
     <span class="details-heading"></span>
     <ul class="sidebar-nav--list">
-      {% if filters and is_forum_moderator %}
+      {% if filters and is_contributor(request.user) %}
         <li class="sidebar-subheading sidebar-nav--heading-item">{{ _('Filter by') }}</li>
         <li class="{{ 'selected' if filter == None else '' }}"><a href="{{ questions_url(filter=None, page=None) }}">{{ _('All') }}</a></li>
         {% for f, desc in filters.items() %}
@@ -360,7 +360,7 @@
         </li>
       {% endif %}
 
-      {% if show != "spam" and is_forum_moderator %}
+      {% if show != "spam" and is_contributor(request.user) %}
       <li class="sidebar-subheading sidebar-nav--heading-item">{{ _('Show me') }}</li>
       <li {{ owner|class_selected(None) }}><a href="{{ questions_url(owner='all', page=None) }}">{{ _('Posts from everyone') }}</a></li>
       <li {{ owner|class_selected('mine') }}><a href="{{ questions_url(owner='mine', page=None) }}">{{ _('My contributions') }}</a></li>
