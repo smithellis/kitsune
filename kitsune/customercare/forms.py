@@ -34,6 +34,7 @@ UPDATE_CHANNEL_CHOICES = [
 
 POLICY_DISTRIBUTION_CHOICES = [
     ("", "Select policy distribution method"),
+    ("firefox_admin_console", "Firefox Enterprise Admin Console"),
     ("group_policy_admx", "Windows Group Policy (ADMX)"),
     ("windows_mdm", "Windows MDM (Intune / OMA-URI / ADMX-backed)"),
     (
@@ -67,6 +68,7 @@ UPDATE_CHANNEL_TAGS = {
 }
 
 POLICY_DISTRIBUTION_TAGS = {
+    "firefox_admin_console": "seg-firefox-admin-console",
     "group_policy_admx": "seg-policy-windows-gpo",
     "windows_mdm": "seg-policy-windows-mdm",
     "macos_config_profiles": "seg-policy-macos-config-profiles",
