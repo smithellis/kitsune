@@ -58,6 +58,22 @@
   {% endif %}
 {% endmacro %}
 
+{% macro view_count(question) %}
+  {% if question.num_visits %}
+    {% set _view_tip %}{% trans count=question.num_visits %}{{ count }} view{% pluralize %}{{ count }} views{% endtrans %}{% endset %}
+    <span class="status-label status-label--neutral question-entry--view-count"
+          title="{{ _view_tip }}">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+      {{ question.num_visits }}
+    </span>
+  {% endif %}
+{% endmacro %}
+
 {% macro question_entry(question, profile_username=None) %}
   {% set _base_url = url('users.questions', username=profile_username) if (question.channel == "direct_support" and profile_username) else None %}
   {% if _base_url %}
@@ -165,6 +181,7 @@
       {% endif %}
       {{ reply_count(question) }}
       {{ vote_count(question) }}
+      {{ view_count(question) }}
       {% if question.is_spam %}
         <span class="status-label status-label--pending"
               title="{{ _('This question has been marked as spam') }}">{{ _("Spam") }}</span>
