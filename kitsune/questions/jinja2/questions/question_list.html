@@ -134,7 +134,7 @@
        hx-get="{{ questions_url(tagged=None) }}"
        hx-target="#questions-list"
        hx-select="#questions-list"
-       hx-select-oob="#sidebar-tag-filter,#tagged"
+       hx-select-oob="#sidebar-tag-filter,#tagged,#owner-tabs"
        hx-swap="outerHTML"
        hx-push-url="true"
        title="{{ _('Clear all tag filters') }}" aria-label="{{ _('Clear all tag filters') }}">
@@ -152,22 +152,22 @@
 <nav id="owner-tabs" class="tabs">
     <ul class="tabs--list subtopics">
       <li class="tabs--item">
-        <a href="{{ questions_url(show='all', filter=None, page=None) }}" {{ show|class_selected('all') }}>
+        <a href="{{ questions_url(show='all', filter=None, page=None, tagged=tagged or None) }}" {{ show|class_selected('all') }}>
           <span>{{ _('All') }}</span>
         </a>
       </li>
       <li class="tabs--item">
-        <a href="{{ questions_url(show='needs-attention', filter=None, page=None) }}" {{ show|class_selected('needs-attention') }}>
+        <a href="{{ questions_url(show='needs-attention', filter=None, page=None, tagged=tagged or None) }}" {{ show|class_selected('needs-attention') }}>
           <span>{{ _('Attention needed') }}</span>
         </a>
       </li>
       <li class="tabs--item">
-        <a href="{{ questions_url(show='responded', filter=None, page=None) }}" {{ show|class_selected('responded') }}>
+        <a href="{{ questions_url(show='responded', filter=None, page=None, tagged=tagged or None) }}" {{ show|class_selected('responded') }}>
           <span>{{ _('Responded') }}</span>
         </a>
       </li>
       <li class="tabs--item">
-        <a href="{{ questions_url(show='done', filter=None, page=None) }}" {{ show|class_selected('done') }}>
+        <a href="{{ questions_url(show='done', filter=None, page=None, tagged=tagged or None) }}" {{ show|class_selected('done') }}>
           <span>{{ _('Done') }}</span>
         </a>
       </li>
@@ -281,7 +281,7 @@
                      hx-get="{{ questions_url(tagged=None, page=None) }}"
                      hx-target="#questions-list"
                      hx-select="#questions-list"
-                     hx-select-oob="#sidebar-tag-filter,#tagged"
+                     hx-select-oob="#sidebar-tag-filter,#tagged,#owner-tabs"
                      hx-swap="outerHTML"
                      hx-push-url="true">{{ _('Clear all') }}</a>
                 </div>
@@ -295,7 +295,7 @@
                          hx-get="{{ questions_url(tagged=remaining or None, page=None) }}"
                          hx-target="#questions-list"
                          hx-select="#questions-list"
-                         hx-select-oob="#sidebar-tag-filter,#tagged"
+                         hx-select-oob="#sidebar-tag-filter,#tagged,#owner-tabs"
                          hx-swap="outerHTML"
                          hx-push-url="true"
                          title="{{ _('{tag} — click to remove')|f(tag=tag.name) }}" aria-label="{{ _('{tag} — click to remove')|f(tag=tag.name) }}">
@@ -334,7 +334,7 @@
                      hx-get="{{ _tag_url }}"
                      hx-target="#questions-list"
                      hx-select="#questions-list"
-                     hx-select-oob="#sidebar-tag-filter,#tagged"
+                     hx-select-oob="#sidebar-tag-filter,#tagged,#owner-tabs"
                      hx-swap="outerHTML"
                      hx-push-url="true">
                     <span>{{ tag_data.tags__name }}</span>
