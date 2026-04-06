@@ -39,7 +39,7 @@ class QuestionPage(BasePage):
         self.reply_solution_header = lambda reply_id: page.locator(
             f"div#{reply_id} h3[class='is-solution']")
 
-        """Genera question locators."""
+        """General question locators."""
         self.question_author = page.locator("div[class='question'] span[class='display-name']")
         self.questions_header = page.locator(
             "h2[class='sumo-callout-heading summary no-product-heading']")

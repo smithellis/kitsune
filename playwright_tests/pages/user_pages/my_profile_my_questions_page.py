@@ -8,13 +8,11 @@ class MyProfileMyQuestionsPage(BasePage):
 
         """Locators belonging to the My Questions profile page."""
         self.questions_page_heading = page.locator("h2[class='sumo-page-subheading']")
-        self.questions_no_question_message = page.locator("article#profile p")
-        self.questions_list = page.locator("article#profile ul a")
-        self.questions_titles = page.locator("article#profile ul a li")
-        self.questions_by_index = lambda index: page.locator(
-            f"//article[@id='profile']/ul/a[{index}]/li")
-        self.question_by_name = lambda name: page.locator("article#profile ul a li").get_by_text(
-            name, exact=True)
+        self.questions_no_question_message = page.locator("//p[@class='my-questions--empty']")
+        self.questions_list = page.locator("//a[@class='question-entry--title-link']")
+        self.questions_titles = page.locator("//h3[@class='question-entry--title']")
+        self.question_by_name = lambda name: page.locator(
+            f"//a[@class='question-entry--title-link' and text()='{name}']")
 
     """Actions against the My Questions profile page locators."""
     def get_text_of_no_question_message(self) -> str:
@@ -27,7 +25,7 @@ class MyProfileMyQuestionsPage(BasePage):
 
     def click_on_a_question_by_index(self, index_of_question: int):
         """Clicks on a question by its index."""
-        self._click(self.questions_by_index(index_of_question))
+        self._click(self.questions_titles.nth(index_of_question))
 
     def click_on_a_question_by_name(self, question_title: str):
         """Clicks on a question by its title."""
@@ -35,7 +33,7 @@ class MyProfileMyQuestionsPage(BasePage):
 
     def get_text_of_listed_question_by_index(self, index: int) -> str:
         """Returns the text of the first listed question."""
-        return self._get_text_of_element(self.questions_by_index(index))
+        return self._get_text_of_element(self.questions_titles.nth(index))
 
 
     def get_all_my_posted_questions(self) -> list[str]:

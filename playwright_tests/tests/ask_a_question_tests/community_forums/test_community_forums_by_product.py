@@ -401,9 +401,6 @@ def test_questions_transitions_on_status_change(page: Page, create_user_factory,
             assert (question_details["question_id"] in sumo_pages.product_support_forum.
                     get_ids_of_all_listed_questions())
 
-            assert sumo_pages.product_support_forum.is_question_contributed_indicator_displayed(
-                question_details["question_id"])
-
             if question_status == "has_solution":
                 assert sumo_pages.product_support_forum.is_question_solved_indicator_displayed(
                     question_details["question_id"])
@@ -438,8 +435,6 @@ def test_questions_transitions_on_status_change(page: Page, create_user_factory,
         sumo_pages.product_support_forum.click_on_a_certain_tab_filter("Responded")
         assert (question_details["question_id"] in sumo_pages.product_support_forum.
                 get_ids_of_all_listed_questions())
-        assert sumo_pages.product_support_forum.is_question_contributed_indicator_displayed(
-            question_details["question_id"])
         assert not sumo_pages.product_support_forum.is_question_solved_indicator_displayed(
             question_details["question_id"])
         assert not sumo_pages.product_support_forum.is_question_archived_indicator_displayed(

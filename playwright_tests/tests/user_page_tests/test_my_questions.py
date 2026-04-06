@@ -133,18 +133,18 @@ def test_question_page_reflects_posted_questions_and_redirects_to_question(page:
     with check, allure.step("Navigating to my questions profile page and verifying that the first "
                             "element from the My Questions page is the recently posted question"):
         sumo_pages.top_navbar.click_on_my_questions_profile_option()
-        assert (sumo_pages.my_questions_page.get_text_of_listed_question_by_index(1).
+        assert (sumo_pages.my_questions_page.get_text_of_listed_question_by_index(0).
                 strip() == second_question["aaq_subject"].strip())
-        assert (sumo_pages.my_questions_page.get_text_of_listed_question_by_index(2).
+        assert (sumo_pages.my_questions_page.get_text_of_listed_question_by_index(1).
                 strip() == first_question["aaq_subject"].strip())
 
     with allure.step("Clicking on the first list item and verifying that the user is "
                      "redirected to the correct question"):
-        sumo_pages.my_questions_page.click_on_a_question_by_index(1)
+        sumo_pages.my_questions_page.click_on_a_question_by_index(0)
         expect(page).to_have_url(second_question["question_page_url"])
 
     with allure.step("Navigating back, clicking on the second listed item and verifying that the "
                      "user is redirected to the correct question"):
         utilities.navigate_back()
-        sumo_pages.my_questions_page.click_on_a_question_by_index(2)
+        sumo_pages.my_questions_page.click_on_a_question_by_index(1)
         expect(page).to_have_url(first_question["question_page_url"])
