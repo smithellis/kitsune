@@ -50,6 +50,14 @@
 {% endblock %}
 
 {% block filter_dropdown %}
-  {{ filter_dropdown("reason-filter-form", "flagit-reason-filter", "Filter by reason:", "reason", "All reasons", reasons, selected_reason) }}
-  {{ filter_dropdown("content-type-filter-form", "flagit-content-type-filter", "Filter by type:", "content_type", "All types", content_types, selected_content_type) }}
+  {# L10n: Displayed for moderators only on https://support.mozilla.org/flagged. This is a label for a flagged content filter. #}
+  {% set reason_filter_label = _("Filter by reason:") %}
+  {# L10n: Displayed for moderators only on https://support.mozilla.org/flagged. This is a default option for the "Filter by reason:" flagged content filter. #}
+  {% set reason_filter_default_option = _("All reasons") %}
+  {{ filter_dropdown("reason-filter-form", "flagit-reason-filter", reason_filter_label, "reason", reason_filter_default_option, reasons, selected_reason) }}
+  {# L10n: Displayed for moderators only on https://support.mozilla.org/flagged. This is a label for a flagged content filter. #}
+  {% set type_filter_label = _("Filter by type:") %}
+  {# L10n: Displayed for moderators only on https://support.mozilla.org/flagged. This is a default option for the "Filter by type:" flagged content filter. #}
+  {% set type_filter_default_option = _("All types") %}
+  {{ filter_dropdown("content-type-filter-form", "flagit-content-type-filter", type_filter_label, "content_type", type_filter_default_option, content_types, selected_content_type) }}
 {% endblock %}
