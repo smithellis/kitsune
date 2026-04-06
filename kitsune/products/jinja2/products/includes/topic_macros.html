@@ -32,7 +32,10 @@
         </li>
         {% endfor %}
       </ul>
-      <a class="view-all-link" href="{{ topic_data.topic_url }}">View All {{ topic_data.total_articles }} Articles</a>
+      <a class="view-all-link" href="{{ topic_data.topic_url }}">
+        {# L10n: A link displayed at the bottom of article topic cards, which leads to topic pages where all the related articles are listed. You can see topic cards on pages like https://support.mozilla.org/products/firefox #}
+        {{ ngettext("View 1 Article", "View All {n} articles", topic_data.total_articles)|f(n=topic_data.total_articles) }}
+      </a>
     </div>
     {% endfor %}
   </div>
