@@ -4,6 +4,7 @@
 {% from "sumo/includes/question_entry.html" import question_entry %}
 
 {% set classes = 'questions' %}
+{% set _user_is_contributor = is_contributor(request.user) %}
 
 {% if all_products %}
   {% set page_title = _('All Products') %}
@@ -200,7 +201,7 @@
         <section class="forum--question-list questions">
           {% for question in questions.object_list %}
             <article id="question-{{ question.id }}" class="question-entry">
-              {{ question_entry(question, request=request) }}
+              {{ question_entry(question, request=request, user_is_contributor=_user_is_contributor) }}
             </article>
           {% endfor %}
         </section>
@@ -235,7 +236,7 @@
   <nav class="sidebar-nav">
     <span class="details-heading"></span>
     <ul class="sidebar-nav--list">
-      {% if filters and is_contributor(request.user) %}
+      {% if filters and _user_is_contributor %}
         <li class="sidebar-subheading sidebar-nav--heading-item">{{ _('Filter by') }}</li>
         <li class="{{ 'selected' if filter == None else '' }}"><a href="{{ questions_url(filter=None, page=None) }}">{{ _('All') }}</a></li>
         {% for f, desc in filters.items() %}
@@ -360,7 +361,7 @@
         </li>
       {% endif %}
 
-      {% if show != "spam" and is_contributor(request.user) %}
+      {% if show != "spam" and _user_is_contributor %}
       <li class="sidebar-subheading sidebar-nav--heading-item">{{ _('Show me') }}</li>
       <li {{ owner|class_selected(None) }}><a href="{{ questions_url(owner='all', page=None) }}">{{ _('Posts from everyone') }}</a></li>
       <li {{ owner|class_selected('mine') }}><a href="{{ questions_url(owner='mine', page=None) }}">{{ _('My contributions') }}</a></li>
