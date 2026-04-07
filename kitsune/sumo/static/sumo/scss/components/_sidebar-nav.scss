@@ -222,8 +222,8 @@
   margin-top: p.$spacing-md;
   margin-bottom: p.$spacing-sm;
 
-  &:first-child,
-  &:nth-child(2) {
+  .sidebar-nav--list > &:first-child,
+  .sidebar-nav--list > &:nth-child(2) {
     margin-top: 0;
   }
 
