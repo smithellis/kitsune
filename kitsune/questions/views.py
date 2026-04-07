@@ -10,10 +10,9 @@ from django.contrib import messages
 from django.contrib.auth.views import redirect_to_login
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.sites.models import Site
-from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import EmptyPage, PageNotAnInteger
-from django.db.models import Count, Exists, F, OuterRef, Q
+from django.db.models import Exists, F, OuterRef, Q
 from django.db.models.functions import Now
 from django.http import (
     Http404,
@@ -266,8 +265,6 @@ def question_list(request, product_slug=None, topic_slug=None):
         .filter(updated__range=(today - timedelta(days=365 * 2), Now()))
     )
 
-    question_qs = question_qs.prefetch_related("tags")
-
     # Annotate with visit counts to avoid N+1 queries
     question_qs = question_qs.annotate(visits_count=F("questionvisits__visits"))
 
@@ -313,10 +310,6 @@ def question_list(request, product_slug=None, topic_slug=None):
 
     question_qs = question_qs.filter(locale_query)
 
-    # Snapshot before tag filtering so available_tags reflects the full set
-    # for the current product/topic/locale context, not a narrowed subset.
-    base_qs = question_qs
-
     # Apply tag filter.
     if tagged:
         tag_slugs = tagged.split(",")[:10]
@@ -343,18 +336,7 @@ def question_list(request, product_slug=None, topic_slug=None):
         else:
             question_qs = Question.objects.none()
 
-    # Top 50 tags from the pre-tag-filtered set, ordered by frequency.
-    # Cache per product/topic/locale since this query is expensive and rarely changes.
-    _tags_cache_key = f"available_tags:{product_slug}:{topic_slug}:{request.LANGUAGE_CODE}"
-    available_tags = cache.get(_tags_cache_key)
-    if available_tags is None:
-        available_tags = list(
-            Question.objects.filter(pk__in=base_qs.values("pk").distinct(), tags__isnull=False)
-            .values("tags__name", "tags__slug")
-            .annotate(count=Count("id", distinct=True))
-            .order_by("-count")[:50]
-        )
-        cache.set(_tags_cache_key, available_tags, 60 * 5)
+    available_tags = []
     tagged_set = set(tagged.split(",")) if tagged else set()
 
     # Set the order.
@@ -378,7 +360,7 @@ def question_list(request, product_slug=None, topic_slug=None):
             url = build_paged_url(request)
             return HttpResponseRedirect(urlparams(url, page=1))
 
-    # Recent answered stats
+    # Recent answered stats.
     extra_filters = locale_query
 
     if products:
@@ -386,6 +368,7 @@ def question_list(request, product_slug=None, topic_slug=None):
 
     recent_asked_count = Question.recent_asked_count(extra_filters)
     recent_unanswered_count = Question.recent_unanswered_count(extra_filters)
+
     if recent_asked_count:
         recent_answered_percent = int(
             (float(recent_asked_count - recent_unanswered_count) / recent_asked_count) * 100
