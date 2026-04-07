@@ -40,9 +40,10 @@
       </p>
     {% else %}
       <ul class="question-entry-list">
+        {% set _user_is_contributor = is_contributor(request.user) %}
         {% for question in questions %}
           <li class="question-entry">
-            {{ question_entry(question, profile_username=profile.user.username, request=request) }}
+            {{ question_entry(question, profile_username=profile.user.username, request=request, user_is_contributor=_user_is_contributor) }}
           </li>
         {% endfor %}
       </ul>

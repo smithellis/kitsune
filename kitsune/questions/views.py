@@ -10,6 +10,7 @@ from django.contrib import messages
 from django.contrib.auth.views import redirect_to_login
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.sites.models import Site
+from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import EmptyPage, PageNotAnInteger
 from django.db.models import Count, Exists, F, OuterRef, Q
@@ -343,14 +344,17 @@ def question_list(request, product_slug=None, topic_slug=None):
             question_qs = Question.objects.none()
 
     # Top 50 tags from the pre-tag-filtered set, ordered by frequency.
-    # Force evaluation here so the template receives a plain list, avoiding
-    # lazy queryset double-evaluation issues.
-    available_tags = list(
-        Question.objects.filter(pk__in=base_qs.values("pk").distinct(), tags__isnull=False)
-        .values("tags__name", "tags__slug")
-        .annotate(count=Count("id", distinct=True))
-        .order_by("-count")[:50]
-    )
+    # Cache per product/topic/locale since this query is expensive and rarely changes.
+    _tags_cache_key = f"available_tags:{product_slug}:{topic_slug}:{request.LANGUAGE_CODE}"
+    available_tags = cache.get(_tags_cache_key)
+    if available_tags is None:
+        available_tags = list(
+            Question.objects.filter(pk__in=base_qs.values("pk").distinct(), tags__isnull=False)
+            .values("tags__name", "tags__slug")
+            .annotate(count=Count("id", distinct=True))
+            .order_by("-count")[:50]
+        )
+        cache.set(_tags_cache_key, available_tags, 60 * 5)
     tagged_set = set(tagged.split(",")) if tagged else set()
 
     # Set the order.
