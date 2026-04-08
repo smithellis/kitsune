@@ -223,6 +223,7 @@ def questions_contributed(request, username):
     profile = get_object_or_404(Profile, user__username=username, user__is_active=True)
 
     channel = request.GET.get("channel")
+    show = request.GET.get("show")
     product_slug = request.GET.get("product")
     topic_slug = request.GET.get("topic")
 
@@ -230,9 +231,13 @@ def questions_contributed(request, username):
     if not is_owner and channel == "direct_support":
         raise Http404()
 
+    is_moderator = request.user.has_perm("flagit.can_moderate")
+    if not is_moderator and show == "spam":
+        raise Http404()
+
     if channel != "direct_support":
         forum_questions = (
-            profile.user.questions.filter(is_spam=False)
+            profile.user.questions
             .select_related("solution", "product", "topic", "last_answer", "last_answer__creator")
             .order_by("-created")
         )
@@ -240,8 +245,14 @@ def questions_contributed(request, username):
             forum_questions = forum_questions.filter(product__slug=product_slug)
         if topic_slug:
             forum_questions = forum_questions.filter(topic__slug=topic_slug)
+        user_has_spam_questions = forum_questions.filter(is_spam=True).exists()
+        if is_moderator and show == "spam":
+            forum_questions = forum_questions.filter(is_spam=True)
+        elif not is_moderator or show == "valid":
+            forum_questions = forum_questions.filter(is_spam=False)
     else:
         forum_questions = profile.user.questions.none()
+        user_has_spam_questions = False
 
     support_tickets = (
         SupportTicket.objects.filter(
@@ -272,8 +283,11 @@ def questions_contributed(request, username):
             "profile": profile,
             "questions": questions,
             "channel": channel,
+            "show": show,
             "product_slug": product_slug,
             "topic_slug": topic_slug,
+            "is_moderator": is_moderator,
+            "user_has_spam_questions": user_has_spam_questions,
         },
     )
 
