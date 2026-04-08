@@ -129,11 +129,11 @@ You can then log in as that user by visiting: `http://localhost:8000/user/foobar
 
 ### Install Sample Data
 
-```eval_rst
 We include some sample data to get you started. You can install it by
-running this command::
+running this command:
 
-    docker-compose exec web ./manage.py generatedata
+```
+docker-compose exec web ./manage.py generatedata
 ```
 
 ### Get AAQ working
