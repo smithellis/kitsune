@@ -65,7 +65,7 @@ TB_VERSION_LABEL = _lazy("Thunderbird version")
 # L10n: A description of the "Thunderbird version" field, displayed when filing a Thunderbird (desktop) question form on https://support.mozilla.org/questions/new/thunderbird/form.
 TB_VERSION_HELP_TEXT_DESKTOP = _lazy("Find your version in Thunderbird App Menu ☰ > Help > About, e.g., 140.8.0esr, 149.0 or 150.0b1.")
 # L10n: A description of the "Thunderbird version" field, displayed when filing a Thunderbird for Android question form on https://support.mozilla.org/questions/new/thunderbird-android/form.
-TB_VERSION_HELP_TEXT_ANDROID = _lazy("Find your version in Thunderbird App Menu ☰ (the top-left corner) > Settings > Support/About, e.g., 17.0.")
+TB_VERSION_HELP_TEXT_ANDROID = _lazy("Find your version in Thunderbird App Menu ☰ > Settings > Support/About, e.g., 17.0.")
 # L10n: A placeholder for the "Thunderbird version" field, displayed when filing a Thunderbird (desktop) question form on https://support.mozilla.org/questions/new/thunderbird/form.
 TB_VERSION_PLACEHOLDER_DESKTOP = _lazy("e.g., 140.8.0esr, 149.0 or 150.0b1")
 # L10n: A placeholder for the "Thunderbird version" field, displayed when filing a Thunderbird for Android question form on https://support.mozilla.org/questions/new/thunderbird-android/form.
