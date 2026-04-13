@@ -104,7 +104,7 @@ After the above you can do some optional steps if you want to use the admin:
 -   Create a profile for this user
 
     ```
-    $ ./manage.py shell_plus
+    docker-compose exec web ./manage.py shell_plus
     In [1]: u = User.objects.get(username="superuser")
     In [2]: Profile(user=u).save()
     ```
