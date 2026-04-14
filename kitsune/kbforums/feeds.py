@@ -7,15 +7,15 @@ from django.utils.translation import gettext as _
 from kitsune import forums as constants
 from kitsune.kbforums.models import Thread
 from kitsune.sumo.feeds import Feed
-from kitsune.wiki.models import Document
+from kitsune.wiki.views import get_visible_document_or_404
 
 
 class ThreadsFeed(Feed):
     feed_type = Atom1Feed
 
     def get_object(self, request, document_slug):
-        return get_object_or_404(
-            Document, slug=document_slug, locale=request.LANGUAGE_CODE, allow_discussion=True
+        return get_visible_document_or_404(
+            request.user, locale=request.LANGUAGE_CODE, slug=document_slug, allow_discussion=True
         )
 
     def title(self, document):
@@ -43,8 +43,8 @@ class PostsFeed(Feed):
     feed_type = Atom1Feed
 
     def get_object(self, request, document_slug, thread_id):
-        doc = get_object_or_404(
-            Document, slug=document_slug, locale=request.LANGUAGE_CODE, allow_discussion=True
+        doc = get_visible_document_or_404(
+            request.user, locale=request.LANGUAGE_CODE, slug=document_slug, allow_discussion=True
         )
         return get_object_or_404(Thread, pk=thread_id, document=doc)
 
