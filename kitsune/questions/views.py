@@ -435,11 +435,26 @@ def question_list(request, product_slug=None, topic_slug=None):
             topic_slug=topic_slug or None,
             topic_navigation="1" if topic_navigation else None,
             show=show,
+            filter=filter_ or None,
             tagged=tagged or None,
         )
         data["tags_url"] = tags_url
 
     return render(request, "questions/question_list.html", data)
+
+
+def _apply_question_filters(search, **kwargs):
+    RANGE_FIELDS = {"created", "updated"}
+
+    for key, value in kwargs.items():
+        if value is None:
+            continue
+
+        filter_type = "range" if key in RANGE_FIELDS else "term"
+        field_name = f"question_{key}"
+        search = search.filter(filter_type, **{field_name: value})
+
+    return search
 
 
 @require_GET
@@ -481,6 +496,44 @@ def question_tags(request):
     }
     base_list_url_with_params = urlparams(base_list_url, **preserve_params)
 
+    filter_ = request.GET.get("filter", "")
+    if filter_ not in FILTER_GROUPS.get(show, {}):
+        filter_ = None
+
+    now = timezone.now()
+
+    FILTER_PRESETS = {
+        "new": {
+            "is_locked": False,
+            "has_answers": False,
+            "created": {"gte": now - timedelta(days=7)},
+        },
+        "unhelpful-answers": {
+            "is_locked": False,
+            "has_solution": False,
+            "last_answer_is_by_creator": True,
+            "created": {"gte": now - timedelta(days=7)},
+        },
+        "needsinfo": {
+            "is_locked": False,
+            "has_answers": True,
+            "has_solution": False,
+            "last_answer_is_by_creator": False,
+            "tag_slugs": config.NEEDS_INFO_TAG_NAME,
+        },
+        "solved": {
+            "has_solution": True,
+        },
+        "locked": {
+            "is_locked": True,
+        },
+        "recently-unanswered": {
+            "is_locked": False,
+            "has_answers": False,
+            "created": {"gte": now - timedelta(hours=24)},
+        },
+    }
+
     available_tags = []
     try:
         search = QuestionDocument.search()
@@ -493,57 +546,61 @@ def question_tags(request):
             search = search.filter("term", locale=locale)
         else:
             search = search.filter(
-                DSLQ("term", locale=locale)
-                | DSLQ("term", locale=settings.WIKI_DEFAULT_LANGUAGE)
+                DSLQ("term", locale=locale) | DSLQ("term", locale=settings.WIKI_DEFAULT_LANGUAGE)
             )
 
         if topic_id:
             search = search.filter("term", question_topic_id=topic_id)
 
-        now = timezone.now()
-        # Base filter: 2-year window, matching question_list view
-        search = search.filter(
-            "range", question_updated={"gte": now - timedelta(days=365 * 2)}
+        # Base filters matching question_list view:
+        # 2-year window
+        search = search.filter("range", question_updated={"gte": now - timedelta(days=365 * 2)})
+        # Exclude questions older than 90 days with no answers
+        search = search.exclude(
+            DSLQ("range", question_created={"lt": now - timedelta(days=90)})
+            & DSLQ("term", question_has_answers=False)
         )
-
-        if show == "needs-attention":
-            search = (
-                search.filter("term", question_has_solution=False)
-                .filter("term", question_is_locked=False)
-                .filter("term", question_is_archived=False)
-                .filter("range", question_updated={"gte": now - timedelta(days=7)})
-                .filter(
-                    DSLQ("term", question_last_answer_is_by_creator=True)
-                    | ~DSLQ("exists", field="question_last_answer_is_by_creator")
-                )
+        # Apply sub-filter if present, otherwise fall back to the show-level filter.
+        if filter_ in FILTER_PRESETS:
+            search = _apply_question_filters(search, **FILTER_PRESETS[filter_])
+        elif show == "needs-attention":
+            search = _apply_question_filters(
+                search,
+                is_locked=False,
+                is_archived=False,
+                has_solution=False,
+                updated={"gte": now - timedelta(days=7)},
+            )
+            search = search.filter(
+                DSLQ("term", question_last_answer_is_by_creator=True)
+                | DSLQ("term", question_has_answers=False)
             )
         elif show == "responded":
-            search = (
-                search.filter("term", question_has_solution=False)
-                .filter("term", question_is_locked=False)
-                .filter("term", question_is_archived=False)
-                .filter("exists", field="question_last_answer_is_by_creator")
-                .filter("term", question_last_answer_is_by_creator=False)
+            search = _apply_question_filters(
+                search,
+                is_locked=False,
+                is_archived=False,
+                has_solution=False,
+                has_answers=True,
+                last_answer_is_by_creator=False,
             )
         elif show == "done":
             search = search.filter(
-                DSLQ("term", question_has_solution=True)
-                | DSLQ("term", question_is_locked=True)
+                DSLQ("term", question_has_solution=True) | DSLQ("term", question_is_locked=True)
             )
-        # "all": no additional show filter (spam already excluded from ES index)
 
         TAG_AGGREGATION_SIZE = 50
         search = search.extra(size=0)
-        search.aggs.bucket("tags", DSLA("terms", field="question_tag_slugs", size=TAG_AGGREGATION_SIZE))
+        search.aggs.bucket(
+            "tags", DSLA("terms", field="question_tag_slugs", size=TAG_AGGREGATION_SIZE)
+        )
 
         result = search.execute()
         buckets = result.aggregations.tags.buckets
 
         if buckets:
             slugs = [b.key for b in buckets]
-            tag_name_map = dict(
-                SumoTag.objects.filter(slug__in=slugs).values_list("slug", "name")
-            )
+            tag_name_map = dict(SumoTag.objects.filter(slug__in=slugs).values_list("slug", "name"))
             available_tags = [
                 {"slug": b.key, "name": tag_name_map.get(b.key, b.key), "count": b.doc_count}
                 for b in buckets
