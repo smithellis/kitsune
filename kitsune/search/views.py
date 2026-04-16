@@ -11,14 +11,16 @@ from django.utils.translation import pgettext
 from django.views.decorators.cache import cache_page
 
 from kitsune import search as constants
-from kitsune.products.models import Product
+from kitsune.products.managers import ProductSupportConfigManager
+from kitsune.products.models import Product, ProductSupportConfig
 from kitsune.search.base import SumoSearchPaginator
 from kitsune.search.forms import SimpleSearchForm
 from kitsune.search.search import CompoundSearch, QuestionSearch, WikiSearch
 from kitsune.search.utils import locale_or_default
 from kitsune.sumo.api_utils import JSONRenderer
 from kitsune.sumo.templatetags.jinja_helpers import Paginator as PaginatorRenderer
-from kitsune.sumo.utils import paginate
+from kitsune.sumo.urlresolvers import reverse
+from kitsune.sumo.utils import get_aaq_context, get_aaq_url, paginate
 from kitsune.wiki.facets import documents_for
 
 log = logging.getLogger("k.search")
@@ -156,6 +158,22 @@ def simple_search(request):
         data["product"] = product.slug
     if not results:
         data["message"] = constants.NO_MATCH
+
+    # Compute the support AAQ URL for the "Still need help?" card.
+    # Its presence/absence controls whether the card is shown.
+    is_ticketed = False
+    support_aaq_url = None
+    if not settings.READ_ONLY:
+        if product:
+            aaq_context = get_aaq_context(request, product)
+            support_type = aaq_context.get("current_support_type")
+            if support_type and support_type != ProductSupportConfigManager.SUPPORT_TYPE_HIDE:
+                support_aaq_url = get_aaq_url(aaq_context)
+                is_ticketed = support_type == ProductSupportConfig.SUPPORT_TYPE_ZENDESK
+        else:
+            support_aaq_url = reverse("questions.aaq_step1")
+    data["support_aaq_url"] = support_aaq_url
+    data["is_ticketed"] = is_ticketed
 
     json_data = JSONRenderer().render(data)
     return HttpResponse(
