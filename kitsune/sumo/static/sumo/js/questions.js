@@ -413,7 +413,13 @@ function initSidebarTagFilter() {
 }
 
 document.addEventListener("DOMContentLoaded", initSidebarTagFilter);
-document.addEventListener("htmx:afterSettle", initSidebarTagFilter);
+document.addEventListener("htmx:afterSettle", (event) => {
+  const sidebar = document.getElementById("sidebar-tag-filter");
+  if (sidebar && event.detail && event.detail.target === sidebar) {
+    delete sidebar.dataset.initialized;
+  }
+  initSidebarTagFilter();
+});
 
 document.addEventListener("htmx:pushedIntoHistory", () => {
   const sidebar = document.getElementById("sidebar-tag-filter");
@@ -432,8 +438,5 @@ document.addEventListener("htmx:pushedIntoHistory", () => {
 
   const newUrl = sidebarUrl.pathname + sidebarUrl.search;
   sidebar.setAttribute("hx-get", newUrl);
-  htmx.ajax("GET", newUrl, { target: sidebar, swap: "innerHTML" }).then(() => {
-    delete sidebar.dataset.initialized;
-    initSidebarTagFilter();
-  });
+  htmx.ajax("GET", newUrl, { target: sidebar, swap: "innerHTML" });
 });
