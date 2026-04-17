@@ -120,7 +120,7 @@
 {% endif %}
 
 
-{% if num_results == 0 and product != 'firefox-enterprise' %}
+{% if num_results == 0 and support_aaq_url and (product != 'firefox-enterprise') %}
 <div class="sumo-page-section--inner">
   <div class="card card--ribbon is-inverse">
     <div class="card--details">
@@ -133,19 +133,27 @@
             </g>
           </g>
         </svg>
-        {{ _('Still need help?') }}
+        {{ _("Still need help?") }}
       </h3>
 
       <p class="card--desc">
-        {{ _('We’re here for you. Get support from our contributors or staff members.') }}
+        {% if is_ticketed %}
+          {{ _("We’re here for you! If you haven’t found a solution after exploring our help articles, you can get in touch with our support team.") }}
+        {% else %}
+          {{ _("We’re here for you. Post a question to our support forums and get answers from our community of experts.") }}
+        {% endif %}
       </p>
       <a
         id="search-results-aaq-link"
         class="sumo-button primary-button button-lg"
-        href="{% if product %}/questions/new/{{ product }}/form{% else %}/questions/new{% endif %}"
+        href="{{ support_aaq_url }}"
         data-event-name="link_click"
-        data-event-parameters='{"link_name": "search-results.aaq-step-3.get-support"}'>
-        {{ _('Get Support') }}
+        data-event-parameters=’{"link_name": "search-results.aaq-step-3.get-support"}’>
+        {% if is_ticketed %}
+          {{ _("Contact Support") }}
+        {% else %}
+          {{ _("Ask the Community") }}
+        {% endif %}
       </a>
     </div>
   </div>
