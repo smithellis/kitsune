@@ -78,3 +78,4 @@ gcloud/
 .claude
 .copilot
 .superpowers
+.claude.json
