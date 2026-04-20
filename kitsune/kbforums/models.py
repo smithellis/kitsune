@@ -37,7 +37,7 @@ class Thread(NotificationsMixin, ModelBase):
     created = models.DateTimeField(default=timezone.now, db_index=True)
     creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name="wiki_thread_set")
     last_post = models.ForeignKey(
-        "Post", on_delete=models.CASCADE, related_name="last_post_in", null=True
+        "Post", on_delete=models.SET_NULL, related_name="last_post_in", null=True
     )
     replies = models.IntegerField(default=0)
     is_locked = models.BooleanField(default=False)
