@@ -37,13 +37,12 @@ def handle_tag_delete(instance, **kwargs):
 
 
 @search_receiver(post_save, SumoTag)
-def handle_tag_archive(instance, **kwargs):
-    if instance.is_archived:
-        question_ids = list(
-            Question.objects.filter(tags=instance).values_list("pk", flat=True)
-        )
-        if question_ids:
-            index_objects_bulk.delay("QuestionDocument", question_ids)
+def handle_tag_save(instance, created=False, **kwargs):
+    if created:
+        return
+    question_ids = list(Question.objects.filter(tags=instance).values_list("pk", flat=True))
+    if question_ids:
+        index_objects_bulk.delay("QuestionDocument", question_ids)
 
 
 @search_receiver(post_delete, QuestionVote)

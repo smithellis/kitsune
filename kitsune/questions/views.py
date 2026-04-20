@@ -443,6 +443,14 @@ def question_list(request, product_slug=None, topic_slug=None):
     return render(request, "questions/question_list.html", data)
 
 
+TAG_QUERY_MAX_LENGTH = 64
+
+
+def _escape_wildcard(value):
+    """Escape characters that have special meaning in an ES wildcard query."""
+    return value.replace("\\", "\\\\").replace("*", "\\*").replace("?", "\\?")
+
+
 def _apply_question_filters(search, **kwargs):
     RANGE_FIELDS = {"created", "updated"}
 
@@ -458,8 +466,12 @@ def _apply_question_filters(search, **kwargs):
 
 
 @require_GET
+@ratelimit("question-tags", "30/m", method="GET")
 def question_tags(request):
     """Return tag filter HTML for the sidebar, populated from Elasticsearch."""
+    if request.limited:
+        return HttpResponse(status=429)
+
     show = request.GET.get("show", "needs-attention")
     if show not in FILTER_GROUPS or show == "spam":
         return HttpResponse("")
@@ -591,21 +603,45 @@ def question_tags(request):
 
         TAG_AGGREGATION_SIZE = 50
         search = search.extra(size=0)
-        search.aggs.bucket(
-            "tags", DSLA("terms", field="question_tag_slugs", size=TAG_AGGREGATION_SIZE)
+
+        q = request.GET.get("q", "").strip().lower()[:TAG_QUERY_MAX_LENGTH]
+
+        nested_agg = search.aggs.bucket("nested_tags", DSLA("nested", path="question_tags"))
+
+        if q:
+            pattern = f"*{_escape_wildcard(q)}*"
+            tag_agg_parent = nested_agg.bucket(
+                "matched",
+                DSLA(
+                    "filter",
+                    filter={
+                        "bool": {
+                            "should": [
+                                {"wildcard": {"question_tags.slug": {"value": pattern}}},
+                                {"wildcard": {"question_tags.name": {"value": pattern}}},
+                            ]
+                        }
+                    },
+                ),
+            )
+        else:
+            tag_agg_parent = nested_agg
+
+        slug_agg = tag_agg_parent.bucket(
+            "slugs", DSLA("terms", field="question_tags.slug", size=TAG_AGGREGATION_SIZE)
         )
+        slug_agg.bucket("display_names", DSLA("terms", field="question_tags.display_name", size=1))
 
         result = search.execute()
-        buckets = result.aggregations.tags.buckets
+        if q:
+            slug_buckets = result.aggregations.nested_tags.matched.slugs.buckets
+        else:
+            slug_buckets = result.aggregations.nested_tags.slugs.buckets
 
-        if buckets:
-            slugs = [b.key for b in buckets]
-            tag_name_map = dict(SumoTag.objects.filter(slug__in=slugs).values_list("slug", "name"))
-            available_tags = [
-                {"slug": b.key, "name": tag_name_map.get(b.key, b.key), "count": b.doc_count}
-                for b in buckets
-                if b.key in tag_name_map
-            ]
+        for b in slug_buckets:
+            display_buckets = b.display_names.buckets
+            display_name = display_buckets[0].key if display_buckets else b.key
+            available_tags.append({"slug": b.key, "name": display_name, "count": b.doc_count})
     except TransportError:
         pass
 

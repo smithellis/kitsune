@@ -1,5 +1,5 @@
 from django.db.models import Count, Prefetch, Q
-from elasticsearch.dsl import InnerDoc, connections, field
+from elasticsearch.dsl import InnerDoc, connections, field, normalizer
 
 from kitsune.forums.models import Post
 from kitsune.questions.models import Answer, Question
@@ -17,6 +17,14 @@ from kitsune.wiki.config import (
 )
 
 connections.add_connection(config.DEFAULT_ES_CONNECTION, es_client())
+
+sumo_lowercase_normalizer = normalizer("sumo_lowercase", filter=["lowercase"])
+
+
+class QuestionTagInnerDoc(InnerDoc):
+    slug = field.Keyword()
+    name = field.Keyword(normalizer=sumo_lowercase_normalizer)
+    display_name = field.Keyword()
 
 
 class WikiDocument(SumoDocument):
@@ -138,6 +146,7 @@ class QuestionDocument(SumoDocument):
 
     question_tag_ids = field.Keyword(multi=True)
     question_tag_slugs = field.Keyword(multi=True)
+    question_tags = field.Nested(doc_class=QuestionTagInnerDoc)
     question_has_answers = field.Boolean()
     question_last_answer_is_by_creator = field.Boolean()
     question_num_votes = field.Integer()
@@ -164,6 +173,13 @@ class QuestionDocument(SumoDocument):
 
     def prepare_question_tag_slugs(self, instance):
         return [tag.slug for tag in instance.tags.all() if not tag.is_archived]
+
+    def prepare_question_tags(self, instance):
+        return [
+            QuestionTagInnerDoc(slug=tag.slug, name=tag.name, display_name=tag.name)
+            for tag in instance.tags.all()
+            if not tag.is_archived
+        ]
 
     def prepare_question_has_answers(self, instance):
         return instance.num_answers > 0
