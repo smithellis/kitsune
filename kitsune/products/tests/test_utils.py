@@ -1,10 +1,18 @@
-from kitsune.products.tests import ProductFactory, TopicFactory
-from kitsune.products.utils import get_products, get_taxonomy
+from django.contrib.auth.models import AnonymousUser
+
+from kitsune.products.models import ProductSupportConfig
+from kitsune.products.tests import (
+    ProductFactory,
+    ProductSupportConfigFactory,
+    TopicFactory,
+    ZendeskConfigFactory,
+)
+from kitsune.products.utils import get_products, get_taxonomy, is_enterprise_user
 from kitsune.sumo.tests import TestCase
+from kitsune.users.tests import GroupFactory, UserFactory
 
 
 class GetTaxonomyTests(TestCase):
-
     def setUp(self):
         p1 = ProductFactory(title="product1", slug="p1")
         p2 = ProductFactory(title="product2", slug="p2")
@@ -411,7 +419,6 @@ class GetTaxonomyTests(TestCase):
 
 
 class GetProductsTests(TestCase):
-
     def setUp(self):
         ProductFactory(
             title="product1",
@@ -523,3 +530,95 @@ class GetProductsTests(TestCase):
         self.assertEqual(
             get_products(include_metadata=["description"], output_format="JSON"), expected
         )
+
+
+class IsEnterpriseUserTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        self.product = ProductFactory(slug="firefox-enterprise")
+        self.group = GroupFactory()
+        self.user_in_group = UserFactory(groups=[self.group])
+        self.user_not_in_group = UserFactory()
+
+    def _make_config(self, default, group_default, is_active=True, add_group=True):
+        config = ProductSupportConfigFactory(
+            product=self.product,
+            is_active=is_active,
+            default_support_type=default,
+            group_default_support_type=group_default,
+            zendesk_config=ZendeskConfigFactory(),
+        )
+        if add_group:
+            config.hybrid_support_groups.add(self.group)
+        return config
+
+    def test_anonymous_user_false(self):
+        self._make_config(
+            ProductSupportConfig.SUPPORT_TYPE_ZENDESK,
+            None,
+        )
+        self.assertFalse(is_enterprise_user(AnonymousUser()))
+
+    def test_user_not_in_hybrid_group_false(self):
+        self._make_config(
+            ProductSupportConfig.SUPPORT_TYPE_ZENDESK,
+            None,
+        )
+        self.assertFalse(is_enterprise_user(self.user_not_in_group))
+
+    def test_default_zendesk_group_null_in_group_true(self):
+        self._make_config(
+            ProductSupportConfig.SUPPORT_TYPE_ZENDESK,
+            None,
+        )
+        self.assertTrue(is_enterprise_user(self.user_in_group))
+
+    def test_default_zendesk_group_forum_in_group_false(self):
+        self._make_config(
+            ProductSupportConfig.SUPPORT_TYPE_ZENDESK,
+            ProductSupportConfig.SUPPORT_TYPE_FORUM,
+        )
+        self.assertFalse(is_enterprise_user(self.user_in_group))
+
+    def test_default_zendesk_group_zendesk_in_group_true(self):
+        self._make_config(
+            ProductSupportConfig.SUPPORT_TYPE_ZENDESK,
+            ProductSupportConfig.SUPPORT_TYPE_ZENDESK,
+        )
+        self.assertTrue(is_enterprise_user(self.user_in_group))
+
+    def test_default_forum_group_null_in_group_false(self):
+        self._make_config(
+            ProductSupportConfig.SUPPORT_TYPE_FORUM,
+            None,
+        )
+        self.assertFalse(is_enterprise_user(self.user_in_group))
+
+    def test_default_forum_group_forum_in_group_false(self):
+        self._make_config(
+            ProductSupportConfig.SUPPORT_TYPE_FORUM,
+            ProductSupportConfig.SUPPORT_TYPE_FORUM,
+        )
+        self.assertFalse(is_enterprise_user(self.user_in_group))
+
+    def test_default_forum_group_zendesk_in_group_true(self):
+        self._make_config(
+            ProductSupportConfig.SUPPORT_TYPE_FORUM,
+            ProductSupportConfig.SUPPORT_TYPE_ZENDESK,
+        )
+        self.assertTrue(is_enterprise_user(self.user_in_group))
+
+    def test_default_forum_group_zendesk_not_in_group_false(self):
+        self._make_config(
+            ProductSupportConfig.SUPPORT_TYPE_FORUM,
+            ProductSupportConfig.SUPPORT_TYPE_ZENDESK,
+        )
+        self.assertFalse(is_enterprise_user(self.user_not_in_group))
+
+    def test_inactive_config_false(self):
+        self._make_config(
+            ProductSupportConfig.SUPPORT_TYPE_ZENDESK,
+            None,
+            is_active=False,
+        )
+        self.assertFalse(is_enterprise_user(self.user_in_group))

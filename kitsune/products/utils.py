@@ -10,7 +10,7 @@ _ENTERPRISE_BANNER_CACHE_TIMEOUT = 3600  # 1 hour
 
 
 def is_enterprise_user(user) -> bool:
-    """Return True if the user is in a hybrid support group for firefox-enterprise."""
+    """Return True if the user is in a firefox-enterprise hybrid support group that routes to Zendesk."""
     if not user.is_authenticated:
         return False
 
@@ -19,6 +19,11 @@ def is_enterprise_user(user) -> bool:
 
     if result is None:
         result = ProductSupportConfig.objects.filter(
+            Q(group_default_support_type=ProductSupportConfig.SUPPORT_TYPE_ZENDESK)
+            | Q(
+                default_support_type=ProductSupportConfig.SUPPORT_TYPE_ZENDESK,
+                group_default_support_type__isnull=True,
+            ),
             product__slug="firefox-enterprise",
             is_active=True,
             hybrid_support_groups__user=user,
@@ -121,7 +126,6 @@ def get_products(
     products_qs = products_qs.filter(Q(visible=True) | Q(slug="mozilla-account"))
 
     for product in products_qs:
-
         item = {"title": product.title}
 
         if include_metadata:
