@@ -73,6 +73,10 @@ class Utilities:
     gmail_client_secret = os.environ.get("GMAIL_CLIENT_SECRET")
     gmail_refresh_token = os.environ.get("GMAIL_REFRESH_TOKEN")
 
+    # FxA browser challenge.
+    fxa_browser_challenge_header = os.environ.get("PLAYWRIGHT_FXA_CHALLENGE_HEADER")
+    fxa_browser_challenge_value = os.environ.get("PLAYWRIGHT_FXA_CHALLENGE_HEADER_VALUE")
+
     def get_session_id(self, username: str) -> dict:
         with open(f"core/sessions/.auth/{username}.json", 'r') as staff_cookies:
             staff_user_session = json.load(staff_cookies)
