@@ -82,6 +82,9 @@ def browser_context_args(browser_context_args):
     """
     return {
         "user_agent": Utilities.user_agent,
+        "extra_http_headers":{
+            f"{Utilities.fxa_browser_challenge_header}": f"{Utilities.fxa_browser_challenge_value}"
+        },
         **browser_context_args,
     }
 
