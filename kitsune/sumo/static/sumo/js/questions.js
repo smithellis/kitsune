@@ -348,62 +348,145 @@ function initSidebarTagFilter() {
   const searchInput = container.querySelector(".sidebar-tags--search");
   const noResults = container.querySelector(".sidebar-tags--no-results");
   const showMoreBtn = container.querySelector(".sidebar-tags--show-more");
-  const tagItems = container.querySelectorAll(".sidebar-tags--list li");
-  const total = tagItems.length;
+  const tagList = container.querySelector(".sidebar-tags--list");
+  let tagItems = container.querySelectorAll(".sidebar-tags--list li");
+  let total = tagItems.length;
 
   // Content not loaded yet (HTMX hasn't fired) — don't mark as initialized
   if (!total) return;
   container.dataset.initialized = "true";
-  const maxLimit = Math.min(total, TAGS_MAX_LIMIT);
+  let maxLimit = Math.min(total, TAGS_MAX_LIMIT);
   let limit = TAGS_INITIAL_LIMIT;
-
   const initialLimit = limit;
+
+  const originalListHTML = tagList ? tagList.innerHTML : "";
+  let isServerRendered = false;
+  let fallbackTimer = null;
+  let fallbackController = null;
+
+  function refreshTagItems() {
+    tagItems = container.querySelectorAll(".sidebar-tags--list li");
+    total = tagItems.length;
+    maxLimit = Math.min(total, TAGS_MAX_LIMIT);
+  }
+
+  function restoreOriginal() {
+    if (!isServerRendered || !tagList) return;
+    tagList.innerHTML = originalListHTML;
+    refreshTagItems();
+    isServerRendered = false;
+  }
 
   function updateVisibility() {
     const query = searchInput ? searchInput.value.toLowerCase() : "";
     const searching = query.length > 0;
     let visibleCount = 0;
 
-    tagItems.forEach(li => {
-      const show = searching ? (li.dataset.name || "").includes(query) : parseInt(li.dataset.rank, 10) < limit;
-      li.classList.toggle("is-hidden", !show);
-      if (show) visibleCount++;
-    });
+    if (isServerRendered) {
+      tagItems.forEach(li => {
+        li.classList.remove("is-hidden");
+        visibleCount++;
+      });
+    } else {
+      tagItems.forEach(li => {
+        const show = searching ? (li.dataset.name || "").includes(query) : parseInt(li.dataset.rank, 10) < limit;
+        li.classList.toggle("is-hidden", !show);
+        if (show) visibleCount++;
+      });
+    }
 
     if (noResults) {
       noResults.hidden = !(searching && visibleCount === 0);
     }
 
     if (showMoreBtn) {
-      const expanded = limit >= maxLimit;
-      showMoreBtn.hidden = searching || (total <= initialLimit);
-      showMoreBtn.classList.toggle("is-expanded", expanded);
-      const textSpan = showMoreBtn.querySelector("span");
-      if (textSpan) {
-        if (expanded) {
-          textSpan.textContent = interpolate(
-            ngettext("Hide %(n)s tag", "Hide %(n)s tags", maxLimit - initialLimit),
-            { n: maxLimit - initialLimit },
-            true
-          );
-        } else {
-          const next = Math.min(limit + TAGS_PAGE_SIZE, maxLimit);
-          textSpan.textContent = interpolate(
-            ngettext("Show %(n)s more tag", "Show %(n)s more tags", next - limit),
-            { n: next - limit },
-            true
-          );
+      const shouldHide = searching || isServerRendered || (total <= initialLimit);
+      showMoreBtn.hidden = shouldHide;
+      if (shouldHide) {
+        showMoreBtn.classList.remove("is-expanded");
+      } else {
+        const expanded = limit >= maxLimit;
+        showMoreBtn.classList.toggle("is-expanded", expanded);
+        const textSpan = showMoreBtn.querySelector("span");
+        if (textSpan) {
+          if (expanded) {
+            textSpan.textContent = interpolate(
+              ngettext("Hide %(n)s tag", "Hide %(n)s tags", maxLimit - initialLimit),
+              { n: maxLimit - initialLimit },
+              true
+            );
+          } else {
+            const next = Math.min(limit + TAGS_PAGE_SIZE, maxLimit);
+            textSpan.textContent = interpolate(
+              ngettext("Show %(n)s more tag", "Show %(n)s more tags", next - limit),
+              { n: next - limit },
+              true
+            );
+          }
         }
       }
+    }
+
+    return { searching, query, visibleCount };
+  }
+
+  function fetchFallback(query) {
+    if (!tagList) return;
+
+    if (fallbackController) fallbackController.abort();
+    fallbackController = new AbortController();
+
+    const hxUrl = container.getAttribute("hx-get") || "";
+    if (!hxUrl) return;
+    const url = new URL(hxUrl, window.location.origin);
+    url.searchParams.set("q", query);
+
+    fetch(url.toString(), { signal: fallbackController.signal })
+      .then(r => r.ok ? r.text() : Promise.reject(r))
+      .then(html => {
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        const newList = doc.querySelector(".sidebar-tags--list");
+        tagList.innerHTML = newList ? newList.innerHTML : "";
+        refreshTagItems();
+        isServerRendered = true;
+        updateVisibility();
+      })
+      .catch(err => {
+        if (err && err.name === "AbortError") return;
+      });
+  }
+
+  function onInput() {
+    if (fallbackTimer) {
+      clearTimeout(fallbackTimer);
+      fallbackTimer = null;
+    }
+    if (isServerRendered) {
+      restoreOriginal();
+    }
+
+    const { searching, query, visibleCount } = updateVisibility();
+
+    if (!searching) {
+      if (fallbackController) {
+        fallbackController.abort();
+        fallbackController = null;
+      }
+      return;
+    }
+
+    if (visibleCount === 0) {
+      fallbackTimer = setTimeout(() => fetchFallback(query), 250);
     }
   }
 
   if (searchInput) {
-    searchInput.addEventListener("input", updateVisibility);
+    searchInput.addEventListener("input", onInput);
   }
 
   if (showMoreBtn) {
     showMoreBtn.addEventListener("click", () => {
+      if (isServerRendered) return;
       limit = limit >= maxLimit ? initialLimit : Math.min(limit + TAGS_PAGE_SIZE, maxLimit);
       updateVisibility();
     });

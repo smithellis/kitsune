@@ -472,6 +472,70 @@ class TestQuestionTags(ElasticTestCase):
         self.assertIn("locked", tags)
         self.assertNotIn("unlocked", tags)
 
+    def test_q_matches_by_slug(self):
+        """The 'q' param matches against tag slug."""
+        matching_tag = TagFactory(name="Firefox Startup", slug="firefox-startup")
+        other_tag = TagFactory(name="Performance", slug="performance")
+        QuestionFactory(product=self.product, tags=[matching_tag])
+        QuestionFactory(product=self.product, tags=[other_tag])
+        self._refresh_es()
+
+        tags = self._get_tags(product_slug="firefox", show="all", q="firefox-startup")
+        self.assertIn("firefox startup", tags)
+        self.assertNotIn("performance", tags)
+
+    def test_q_matches_by_name(self):
+        """The 'q' param matches against tag display name when it differs from the slug."""
+        matching_tag = TagFactory(name="hohoho", slug="foo")
+        other_tag = TagFactory(name="Bar baz", slug="bar-baz")
+        QuestionFactory(product=self.product, tags=[matching_tag])
+        QuestionFactory(product=self.product, tags=[other_tag])
+        self._refresh_es()
+
+        tags = self._get_tags(product_slug="firefox", show="all", q="hoho")
+        self.assertIn("hohoho", tags)
+        self.assertNotIn("bar baz", tags)
+
+    def test_q_is_case_insensitive(self):
+        """The 'q' param matches regardless of casing."""
+        tag = TagFactory(name="Firefox Startup", slug="firefox-startup")
+        QuestionFactory(product=self.product, tags=[tag])
+        self._refresh_es()
+
+        tags = self._get_tags(product_slug="firefox", show="all", q="STARTUP")
+        self.assertIn("firefox startup", tags)
+
+    def test_q_empty_returns_all(self):
+        """An empty 'q' behaves identically to the no-query path."""
+        QuestionFactory(product=self.product, tags=[self.tag])
+        self._refresh_es()
+
+        default_tags = self._get_tags(product_slug="firefox", show="all")
+        empty_q_tags = self._get_tags(product_slug="firefox", show="all", q="")
+        self.assertEqual(default_tags, empty_q_tags)
+        self.assertIn("crash", default_tags)
+
+    def test_q_with_no_matches(self):
+        """Query with no matching slug or name returns no tags."""
+        QuestionFactory(product=self.product, tags=[self.tag])
+        self._refresh_es()
+
+        tags = self._get_tags(product_slug="firefox", show="all", q="nonexistent")
+        self.assertEqual(tags, {})
+
+    def test_q_renders_display_name(self):
+        """The rendered name preserves the original tag name casing."""
+        tag = TagFactory(name="Firefox Startup", slug="firefox-startup")
+        QuestionFactory(product=self.product, tags=[tag])
+        self._refresh_es()
+
+        url = reverse("questions.tags")
+        response = self.client.get(
+            url, {"product_slug": "firefox", "show": "all", "q": "startup"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Firefox Startup", response.content)
+
 
 class TestQuestionList(TestCase):
     def test_locale_filter(self):

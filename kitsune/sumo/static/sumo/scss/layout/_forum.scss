@@ -200,6 +200,10 @@
     border: none;
     display: flex;
     align-items: center;
+
+    &[hidden] {
+      display: none;
+    }
     gap: p.$spacing-xs;
     padding: p.$spacing-xs p.$spacing-sm;
     margin-top: p.$spacing-xs;
