@@ -24,11 +24,17 @@ SPAM_CRITERIA_TEMPLATE = Template("""- Attempts to sell, advertise, or promote p
 - Contains QR codes or links/images directing users off-site.
 - Clearly unrelated to Mozilla's "{{ product }}" product features, functionality or purpose.""")
 
+PRODUCT_DESCRIPTION_TEMPLATE = """
+# Product description for Mozilla's "{product}" product
+{description}
+
+"""
+
 SPAM_INSTRUCTIONS = """
 # Role and goal
 You are a content moderation agent specialized in Mozilla's "{product}" product {content_type}.
 Your task is to determine whether a user-submitted {content_name} should be classified as spam.
-
+{product_description}
 # What Constitutes Spam?
 A {content_name} is spam if **at least one** of these criteria applies:
 {criteria}
@@ -76,6 +82,12 @@ def build_spam_prompt(product):
     content_name = "support ticket" if has_ticketing else "question"
     content_fields = "subject and description" if has_ticketing else "title and content"
 
+    product_description = (product.metadata or {}).get("description", "").strip()
+    if product_description:
+        product_description = PRODUCT_DESCRIPTION_TEMPLATE.format(
+            product=product.title, description=product_description
+        )
+
     # Render criteria using Jinja2 template
     criteria = SPAM_CRITERIA_TEMPLATE.render(
         product=product.title, content_name=content_name, has_ticketing=has_ticketing
@@ -92,6 +104,7 @@ def build_spam_prompt(product):
         content_name=content_name,
         criteria=criteria,
         content_fields=content_fields,
+        product_description=product_description,
         format_instructions=spam_pydantic_parser.get_format_instructions()
         + ADDITIONAL_FORMAT_INSTRUCTIONS,
     )
