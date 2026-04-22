@@ -397,6 +397,29 @@ def update(request, flagged_object_id):
         flagged.assigned_timestamp = None
         flagged.save()
 
+        # Keep the Answer's spam state in sync with the moderator's
+        # decision on a spam flag. Rejection unmarks-as-spam (equivalent
+        # to clicking "Unmark as spam"); acceptance backfills
+        # marked_as_spam when missing so OldSpamCleanupHandler can
+        # eventually purge auto-flagged answers, which it otherwise
+        # skips because their marked_as_spam is NULL.
+        if (
+            flagged.reason == FlaggedObject.REASON_SPAM
+            and isinstance(flagged.content_object, Answer)
+            and flagged.content_object.is_spam
+        ):
+            answer = flagged.content_object
+            if str(new_status) == str(FlaggedObject.FLAG_REJECTED):
+                answer.is_spam = False
+                answer.marked_as_spam = None
+                answer.marked_as_spam_by = None
+                answer.save(update_fields=["is_spam", "marked_as_spam", "marked_as_spam_by"])
+            elif (
+                str(new_status) == str(FlaggedObject.FLAG_ACCEPTED)
+                and answer.marked_as_spam is None
+            ):
+                answer.mark_as_spam(request.user)
+
         if (
             isinstance(flagged.content_object, SupportTicket)
             and flagged.content_object.submission_status == SupportTicket.STATUS_FLAGGED
