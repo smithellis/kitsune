@@ -7,7 +7,36 @@ patterns used across the kitsune codebase.
 import re
 from collections.abc import Collection, Mapping
 
-from justhtml import JustHTML, Linkify, SanitizationPolicy, SetAttrs, UrlPolicy, UrlRule
+from justhtml import (
+    JustHTML,
+    Linkify,
+    RewriteAttrs,
+    SanitizationPolicy,
+    SetAttrs,
+    UrlPolicy,
+    UrlRule,
+)
+
+# Private import: justhtml doesn't re-export this. Staying in sync with
+# upstream matters here — if the validation tightens in a future release,
+# a mirrored regex would silently go stale and reintroduce the serializer
+# ValueError.
+from justhtml.serialize import _SERIALIZABLE_ATTR_NAME_RE
+
+
+def _drop_unserializable_attrs(element):
+    """RewriteAttrs callback that strips attributes with unsafe names.
+
+    Malformed HTML (e.g. `<iframe/src \\/\\/onload=...>`) can produce
+    attribute names containing characters justhtml refuses to serialize.
+    Drop them so the serializer doesn't raise. Returning `None` signals
+    "no change" to justhtml.
+    """
+    cleaned = {k: v for k, v in element.attrs.items() if _SERIALIZABLE_ATTR_NAME_RE.match(k)}
+    if len(cleaned) != len(element.attrs):
+        return cleaned
+    return None
+
 
 ALLOWED_BIO_TAGS = {
     "a",
@@ -139,7 +168,7 @@ def linkify(text: str, nofollow: bool = False) -> str:
         nofollow: If `True`, adds `rel="nofollow"` to every
             generated link.
     """
-    transforms = [Linkify()]
+    transforms = [RewriteAttrs("*", _drop_unserializable_attrs), Linkify()]
     if nofollow:
         transforms.append(SetAttrs("a", rel="nofollow"))
     return JustHTML(text, fragment=True, sanitize=False, transforms=transforms).to_html(

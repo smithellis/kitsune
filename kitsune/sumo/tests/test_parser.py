@@ -272,7 +272,7 @@ class TestWikiParser(TestCase):
 <svg/onload=alert(1)"""
 
         self.assertEqual(
-            "<p>&lt;iframe src \\ onload &lt; p&gt;&amp;lt;p&amp;gt;&amp;"
+            "<p>&lt;iframe src onload p&gt;&amp;lt;p&amp;gt;&amp;"
             "lt;iframe/onreadystatechange=alert(/@blinkms/)\n&amp;lt;/p&amp;"
             "gt;&amp;lt;p&amp;gt;&amp;lt;svg/onload=alert(1)\n&amp;lt;/p&amp;"
             "gt;&lt;/iframe&gt;</p>",
