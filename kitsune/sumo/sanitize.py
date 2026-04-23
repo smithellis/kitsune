@@ -8,6 +8,7 @@ import re
 from collections.abc import Collection, Mapping
 
 from justhtml import (
+    Decide,
     JustHTML,
     Linkify,
     RewriteAttrs,
@@ -17,25 +18,64 @@ from justhtml import (
     UrlRule,
 )
 
-# Private import: justhtml doesn't re-export this. Staying in sync with
+# Private imports: justhtml doesn't re-export these. Staying in sync with
 # upstream matters here — if the validation tightens in a future release,
-# a mirrored regex would silently go stale and reintroduce the serializer
+# mirrored regexes would silently go stale and reintroduce the serializer
 # ValueError.
-from justhtml.serialize import _SERIALIZABLE_ATTR_NAME_RE
+from justhtml.serialize import _SERIALIZABLE_ATTR_NAME_RE, _SERIALIZABLE_TAG_NAME_RE
 
 
 def _drop_unserializable_attrs(element):
-    """RewriteAttrs callback that strips attributes with unsafe names.
+    """Strip attributes whose names justhtml's serializer would reject.
 
-    Malformed HTML (e.g. `<iframe/src \\/\\/onload=...>`) can produce
-    attribute names containing characters justhtml refuses to serialize.
-    Drop them so the serializer doesn't raise. Returning `None` signals
-    "no change" to justhtml.
+    justhtml's HTML5 tokenizer is permissive about what it accepts and
+    will happily produce attribute names containing characters its own
+    serializer then refuses to emit, causing a `ValueError` at write
+    time. This callback compares each attribute name against the same
+    regex the serializer uses and drops anything that wouldn't survive
+    serialization.
+
+    Example:
+        Input: `<a href="x" ba\\d="y" onmo\\use="z">`
+        Output: `<a href="x">`  (malformed attr names removed, element
+        kept, valid attrs preserved)
+
+    Returning `None` signals "no change" to justhtml, avoiding a
+    rewrite when everything is already valid.
     """
     cleaned = {k: v for k, v in element.attrs.items() if _SERIALIZABLE_ATTR_NAME_RE.match(k)}
     if len(cleaned) != len(element.attrs):
         return cleaned
     return None
+
+
+def _decide_unserializable_tags(node):
+    """Unwrap elements whose tag names justhtml's serializer would reject.
+
+    The HTML5 tokenizer treats any `<word` sequence as a start tag and
+    will produce element names from characters the serializer then
+    refuses to emit (anything outside `[A-Za-z][A-Za-z0-9:_-]*`). Rather
+    than letting the serializer raise, this callback asks justhtml to
+    `UNWRAP` such elements: the wrapper is removed but its children —
+    text and any valid descendants — stay in place, so the user's
+    content survives.
+
+    Examples:
+        Input: `<p>see <foo.bar>details</foo.bar> here</p>`
+        Output: `<p>see details here</p>`
+
+        Input: `<baz)>text</baz)>`
+        Output: `text`
+
+    Non-element nodes (text, comments, and the document/fragment
+    containers whose names start with `#`) are always kept as-is.
+    """
+    name = node.name
+    if name.startswith("#"):
+        return Decide.KEEP
+    if not _SERIALIZABLE_TAG_NAME_RE.match(name):
+        return Decide.UNWRAP
+    return Decide.KEEP
 
 
 ALLOWED_BIO_TAGS = {
@@ -168,7 +208,11 @@ def linkify(text: str, nofollow: bool = False) -> str:
         nofollow: If `True`, adds `rel="nofollow"` to every
             generated link.
     """
-    transforms = [RewriteAttrs("*", _drop_unserializable_attrs), Linkify()]
+    transforms = [
+        Decide("*", _decide_unserializable_tags),
+        RewriteAttrs("*", _drop_unserializable_attrs),
+        Linkify(),
+    ]
     if nofollow:
         transforms.append(SetAttrs("a", rel="nofollow"))
     return JustHTML(text, fragment=True, sanitize=False, transforms=transforms).to_html(
