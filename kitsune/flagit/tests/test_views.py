@@ -3,9 +3,9 @@ from django.contrib.contenttypes.models import ContentType
 from kitsune.flagit.models import FlaggedObject
 from kitsune.flagit.tests import TestCaseBase
 from kitsune.questions.models import Question
-from kitsune.questions.tests import QuestionFactory
-from kitsune.sumo.tests import post
-from kitsune.users.tests import UserFactory
+from kitsune.questions.tests import AnswerFactory, QuestionFactory
+from kitsune.sumo.tests import get, post
+from kitsune.users.tests import UserFactory, add_permission
 
 
 class FlagTestCase(TestCaseBase):
@@ -37,3 +37,174 @@ class FlagTestCase(TestCaseBase):
         self.assertEqual(self.user.username, flag.creator.username)
         self.assertEqual("spam", flag.reason)
         self.assertEqual(self.question, flag.content_object)
+
+
+class SpamFlagReconciliationTestCase(TestCaseBase):
+    """Moderator decisions on an Answer's spam flag propagate to the Answer.
+
+    Rejection unmarks-as-spam (see mozilla/sumo#2948); acceptance
+    backfills marked_as_spam when missing so the cleanup cron can
+    eventually purge auto-flagged answers.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.moderator = UserFactory()
+        add_permission(self.moderator, FlaggedObject, "can_moderate")
+        self.flagger = UserFactory()
+        self.client.login(username=self.moderator.username, password="testpass")
+
+    def tearDown(self):
+        super().tearDown()
+        self.client.logout()
+
+    def _flag(self, obj, reason=FlaggedObject.REASON_SPAM):
+        return FlaggedObject.objects.create(
+            content_object=obj,
+            reason=reason,
+            status=FlaggedObject.FLAG_PENDING,
+            creator=self.flagger,
+        )
+
+    def _reject(self, flag):
+        return post(
+            self.client,
+            "flagit.update",
+            {"status": FlaggedObject.FLAG_REJECTED},
+            args=[flag.id],
+        )
+
+    def _accept(self, flag):
+        return post(
+            self.client,
+            "flagit.update",
+            {"status": FlaggedObject.FLAG_ACCEPTED},
+            args=[flag.id],
+        )
+
+    def test_rejecting_spam_flag_clears_is_spam_on_answer(self):
+        answer = AnswerFactory()
+        answer.is_spam = True
+        answer.save()
+        flag = self._flag(answer)
+
+        self._reject(flag)
+
+        answer.refresh_from_db()
+        self.assertFalse(answer.is_spam)
+        self.assertIsNone(answer.marked_as_spam)
+        self.assertIsNone(answer.marked_as_spam_by)
+
+    def test_mark_as_spam_sticks_after_earlier_rejection(self):
+        """Regression for mozilla/sumo#2948.
+
+        Auto-flag -> moderator rejects the flag -> moderator later clicks
+        Mark as spam. The manual mark must persist across subsequent page
+        renders of the question-detail view.
+        """
+        answer = AnswerFactory()
+        answer.is_spam = True
+        answer.save()
+        flag = self._flag(answer)
+
+        self._reject(flag)
+
+        post(self.client, "questions.mark_spam", {"answer_id": answer.id})
+
+        get(self.client, "questions.details", kwargs={"question_id": answer.question_id})
+
+        answer.refresh_from_db()
+        self.assertTrue(answer.is_spam)
+        self.assertEqual(self.moderator, answer.marked_as_spam_by)
+
+    def test_rejecting_non_spam_flag_leaves_is_spam_alone(self):
+        answer = AnswerFactory()
+        answer.is_spam = True
+        answer.save()
+        flag = self._flag(answer, reason=FlaggedObject.REASON_ABUSE)
+
+        self._reject(flag)
+
+        answer.refresh_from_db()
+        self.assertTrue(answer.is_spam)
+
+    def test_rejection_overrides_prior_manual_mark_as_spam(self):
+        other_moderator = UserFactory()
+        answer = AnswerFactory()
+        answer.mark_as_spam(other_moderator)
+        self.assertTrue(answer.is_spam)
+        self.assertEqual(other_moderator, answer.marked_as_spam_by)
+
+        flag = self._flag(answer)
+        self._reject(flag)
+
+        answer.refresh_from_db()
+        self.assertFalse(answer.is_spam)
+        self.assertIsNone(answer.marked_as_spam)
+        self.assertIsNone(answer.marked_as_spam_by)
+
+    def test_rejecting_spam_flag_on_non_aaq_content_is_noop(self):
+        """Content types without is_spam (e.g. user profiles) are unaffected."""
+        target = UserFactory()
+        flag = self._flag(target.profile)
+
+        response = self._reject(flag)
+
+        self.assertIn(response.status_code, (200, 302))
+        flag.refresh_from_db()
+        self.assertEqual(FlaggedObject.FLAG_REJECTED, flag.status)
+
+    def test_accepting_spam_flag_backfills_marked_as_spam(self):
+        """Acceptance backfills audit metadata on an auto-flagged answer."""
+        answer = AnswerFactory()
+        answer.is_spam = True
+        answer.save()
+        flag = self._flag(answer)
+
+        self._accept(flag)
+
+        answer.refresh_from_db()
+        self.assertTrue(answer.is_spam)
+        self.assertIsNotNone(answer.marked_as_spam)
+        self.assertEqual(self.moderator, answer.marked_as_spam_by)
+
+    def test_accepting_spam_flag_preserves_existing_manual_mark(self):
+        """Acceptance does not overwrite an answer already manually marked."""
+        other_moderator = UserFactory()
+        answer = AnswerFactory()
+        answer.mark_as_spam(other_moderator)
+        original_timestamp = answer.marked_as_spam
+
+        flag = self._flag(answer)
+        self._accept(flag)
+
+        answer.refresh_from_db()
+        self.assertTrue(answer.is_spam)
+        self.assertEqual(original_timestamp, answer.marked_as_spam)
+        self.assertEqual(other_moderator, answer.marked_as_spam_by)
+
+    def test_accepting_non_spam_flag_does_not_touch_answer(self):
+        """Accepting e.g. an abuse flag leaves the Answer untouched."""
+        answer = AnswerFactory()
+        answer.is_spam = True
+        answer.save()
+        flag = self._flag(answer, reason=FlaggedObject.REASON_ABUSE)
+
+        self._accept(flag)
+
+        answer.refresh_from_db()
+        self.assertTrue(answer.is_spam)
+        self.assertIsNone(answer.marked_as_spam)
+        self.assertIsNone(answer.marked_as_spam_by)
+
+    def test_accepting_spam_flag_on_non_spam_answer_is_noop(self):
+        """Acceptance on is_spam=False content does not retroactively mark."""
+        answer = AnswerFactory()  # is_spam defaults to False
+        flag = self._flag(answer)
+
+        self._accept(flag)
+
+        answer.refresh_from_db()
+        self.assertFalse(answer.is_spam)
+        self.assertIsNone(answer.marked_as_spam)
+        self.assertIsNone(answer.marked_as_spam_by)
