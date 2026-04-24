@@ -152,11 +152,17 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: p.$spacing-xs;
       padding: p.$spacing-xs p.$spacing-sm;
       border-radius: var(--global-radius);
       @include c.text-body-sm;
       color: var(--color-text);
       text-decoration: none;
+
+      > span:first-child {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
 
       &:hover {
         background: rgba(0, 0, 0, 0.07);
