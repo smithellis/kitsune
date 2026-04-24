@@ -73,6 +73,8 @@
 }
 
 .question-entry--excerpt {
+  position: relative;
+  z-index: 1;
   @include c.text-body-md;
   color: var(--color-text-light);
   margin: 0;
