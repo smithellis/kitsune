@@ -107,11 +107,6 @@ function init() {
     document.location = document.location.pathname + '?' + $.param(queryParams);
   });
 
-  // sort questions page reloading
-  $('[data-sort-questions]').on('change', function() {
-    document.location = $(this).val()
-  });
-
 }
 
 /*
@@ -504,36 +499,20 @@ document.addEventListener("htmx:afterSettle", (event) => {
   initSidebarTagFilter();
 });
 
-document.addEventListener("htmx:pushedIntoHistory", () => {
-  const sidebar = document.getElementById("sidebar-tag-filter");
-  if (!sidebar) return;
-
-  const sidebarUrl = new URL(sidebar.getAttribute("hx-get"), window.location.origin);
-  const pageParams = new URLSearchParams(window.location.search);
-
-  sidebarUrl.searchParams.set("show", pageParams.get("show") || "needs-attention");
-  const tagged = pageParams.get("tagged") || "";
-  if (tagged) {
-    sidebarUrl.searchParams.set("tagged", tagged);
-  } else {
-    sidebarUrl.searchParams.delete("tagged");
-  }
-
-  const newUrl = sidebarUrl.pathname + sidebarUrl.search;
-  sidebar.setAttribute("hx-get", newUrl);
-  htmx.ajax("GET", newUrl, { target: sidebar, swap: "innerHTML" });
-});
-
-// Dispatch topic-dropdown change via HTMX. Each <option value> is a full URL;
-// htmx.ajax reads target/select/swap/oob/push-url from the <select> itself via
-// the source option. Delegated on document so the listener survives the
-// oob swap that replaces the <select>.
+// Delegated change listener for question-list dropdowns. Each <option value>
+// is a full URL. Delegated on document so listeners survive the oob swap that
+// replaces these <select>s when other filters change.
+//  - Topic dropdown: htmx.ajax reads target/select/swap/oob/push-url from the
+//    <select> itself via the source option.
+//  - Sort dropdown(s): full page reload to keep existing behavior.
 document.addEventListener("change", (event) => {
   const select = event.target;
-  if (select && select.id === "products-topics-dropdown") {
-    const url = select.value;
-    if (url) {
-      htmx.ajax("GET", url, { source: select });
-    }
+  if (!select) return;
+  const url = select.value;
+  if (!url) return;
+  if (select.id === "products-topics-dropdown") {
+    htmx.ajax("GET", url, { source: select });
+  } else if (select.matches && select.matches("[data-sort-questions]")) {
+    document.location = url;
   }
 });

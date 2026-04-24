@@ -437,6 +437,9 @@ def question_list(request, product_slug=None, topic_slug=None):
             show=show,
             filter=filter_ or None,
             tagged=tagged or None,
+            owner=owner or None,
+            order=order if order != "updated" else None,
+            sort=sort if sort != "desc" else None,
         )
         data["tags_url"] = tags_url
 
@@ -506,6 +509,10 @@ def question_tags(request):
         for k, v in request.GET.items()
         if k not in ("product_slug", "topic_slug", "topic_navigation", "tagged", "page")
     }
+    # When the topic was selected via ?topic= (not the /by-topic/<slug>/ route),
+    # re-expose it under its list-page name so tag hrefs keep the topic filter.
+    if topic_slug and not topic_navigation:
+        preserve_params["topic"] = topic_slug
     base_list_url_with_params = urlparams(base_list_url, **preserve_params)
 
     filter_ = request.GET.get("filter", "")

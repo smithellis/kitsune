@@ -1,3 +1,5 @@
+{% from "questions/includes/macros.html" import filter_oob %}
+
 {% if available_tags %}
   {% set tags_initial_limit = 10 %}
 
@@ -12,7 +14,7 @@
            hx-get="{{ base_list_url_with_params | urlparams(tagged=None, page=None) }}"
            hx-target="#questions-list"
            hx-select="#questions-list"
-           hx-select-oob="#tagged,#owner-tabs"
+           hx-select-oob="{{ filter_oob }}"
            hx-swap="outerHTML"
            hx-push-url="true">{{ _('Clear all') }}</a>
       </div>
@@ -26,7 +28,7 @@
                hx-get="{{ base_list_url_with_params | urlparams(tagged=_remaining or None, page=None) }}"
                hx-target="#questions-list"
                hx-select="#questions-list"
-               hx-select-oob="#tagged,#owner-tabs"
+               hx-select-oob="{{ filter_oob }}"
                hx-swap="outerHTML"
                hx-push-url="true"
                title="{{ _('{tag} — click to remove')|f(tag=tag.name) }}"
@@ -67,7 +69,7 @@
            hx-get="{{ _tag_url }}"
            hx-target="#questions-list"
            hx-select="#questions-list"
-           hx-select-oob="#tagged,#owner-tabs"
+           hx-select-oob="{{ filter_oob }}"
            hx-swap="outerHTML"
            hx-push-url="true">
           <span>{{ tag.name }}</span>
