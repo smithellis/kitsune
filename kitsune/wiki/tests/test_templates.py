@@ -13,7 +13,7 @@ from kitsune.sumo.templatetags.jinja_helpers import urlparams
 from kitsune.sumo.tests import SumoPyQuery as pq
 from kitsune.sumo.tests import TestCase, attrs_eq, get, post
 from kitsune.sumo.urlresolvers import reverse
-from kitsune.users.tests import UserFactory, add_permission
+from kitsune.users.tests import GroupFactory, UserFactory, add_permission
 from kitsune.wiki.config import (
     ADMINISTRATION_CATEGORY,
     CANNED_RESPONSES_CATEGORY,
@@ -2263,6 +2263,80 @@ class TranslateTests(TestCase):
         doc = pq(response.content)
         assert doc(".user-messages .warning").text()
 
+    def test_translate_rejects_revision_id_from_unrelated_document(self):
+        """The ``revision_id`` URL segment must reference a revision of
+        either the English parent or the current translation. Revisions
+        belonging to some other document are not a valid translation
+        basis and should resolve to 404.
+        """
+        unrelated = DocumentFactory(locale=settings.WIKI_DEFAULT_LANGUAGE)
+        unrelated_rev = ApprovedRevisionFactory(
+            document=unrelated,
+            content="UNRELATED_DOC_CONTENT",
+        )
+
+        translation = DocumentFactory(parent=self.d, locale="fr")
+        ApprovedRevisionFactory(document=translation)
+
+        url = reverse(
+            "wiki.new_revision_based_on",
+            locale="fr",
+            args=[translation.slug, unrelated_rev.id],
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(404, response.status_code)
+        self.assertNotIn(b"UNRELATED_DOC_CONTENT", response.content)
+
+    def test_translate_honours_revision_manager_visibility(self):
+        """``translate()`` loads the "based on" revision through
+        ``get_visible_revision_or_404``, matching the rest of the wiki
+        views. A revision whose document isn't visible to the requesting
+        user therefore resolves to 404 instead of being loaded.
+        """
+        group = GroupFactory()
+        other_parent = DocumentFactory(
+            locale=settings.WIKI_DEFAULT_LANGUAGE,
+            restrict_to_groups=[group],
+        )
+        other_rev = ApprovedRevisionFactory(
+            document=other_parent,
+            content="OTHER_PARENT_CONTENT",
+            summary="OTHER_PARENT_SUMMARY",
+            keywords="other,parent,keywords",
+        )
+
+        translation = DocumentFactory(parent=self.d, locale="fr")
+        ApprovedRevisionFactory(document=translation)
+
+        url = reverse(
+            "wiki.new_revision_based_on",
+            locale="fr",
+            args=[translation.slug, other_rev.id],
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(404, response.status_code)
+        self.assertNotIn(b"OTHER_PARENT_CONTENT", response.content)
+        self.assertNotIn(b"OTHER_PARENT_SUMMARY", response.content)
+        self.assertNotIn(b"other,parent,keywords", response.content)
+
+    def test_translate_based_on_parent_revision(self):
+        """Basing a new translation on a specific revision of the English
+        parent renders the translate form with that revision's content.
+        """
+        translation = DocumentFactory(parent=self.d, locale="fr")
+        ApprovedRevisionFactory(document=translation)
+
+        url = reverse(
+            "wiki.new_revision_based_on",
+            locale="fr",
+            args=[translation.slug, self.d.current_revision.id],
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(200, response.status_code)
+
     def test_skip_unready_when_first_translation(self):
         """Never offer an unready-for-localization revision as initial
         translation source text."""
@@ -2640,6 +2714,99 @@ class HelpfulVoteTests(TestCase):
         assert votes[0].helpful
         metadata = HelpfulVoteMetadata.objects.values_list("key", "value")
         self.assertEqual(0, len(metadata))
+
+    def test_vote_rejects_revision_id_from_different_document(self):
+        """``revision_id`` must belong to the document named in the URL.
+        A ``revision_id`` from an unrelated document should not produce a
+        vote on that document.
+        """
+        other_doc = _create_document(title="Other Document")
+        other_rev = other_doc.current_revision
+
+        url = reverse("wiki.document_vote", args=[self.document.slug])
+        response = self.client.post(
+            url,
+            data={
+                "helpful": "true",
+                "revision_id": other_rev.id,
+                "referrer": "",
+                "query": "",
+            },
+            HTTP_HX_REQUEST="true",
+        )
+
+        self.assertEqual(404, response.status_code)
+        self.assertFalse(HelpfulVote.objects.filter(revision=other_rev).exists())
+
+    def test_vote_honours_revision_manager_visibility(self):
+        """``handle_vote`` loads the revision through
+        ``get_visible_revision_or_404``. A ``revision_id`` from a
+        document not visible to the requester should resolve to 404.
+        """
+        group = GroupFactory()
+        other_doc = _create_document(
+            title="Restricted Document",
+            doc_kwargs={"restrict_to_groups": [group]},
+        )
+        other_rev = other_doc.current_revision
+
+        url = reverse("wiki.document_vote", args=[other_doc.slug])
+        response = self.client.post(
+            url,
+            data={
+                "helpful": "true",
+                "revision_id": other_rev.id,
+                "referrer": "",
+                "query": "",
+            },
+            HTTP_HX_REQUEST="true",
+        )
+
+        self.assertEqual(404, response.status_code)
+        self.assertFalse(HelpfulVote.objects.filter(revision=other_rev).exists())
+
+    def test_vote_rejects_unapproved_revision(self):
+        """Votes target the published content of a document, so a
+        ``revision_id`` that isn't approved should resolve to 404.
+        """
+        unapproved = RevisionFactory(document=self.document, is_approved=False)
+
+        url = reverse("wiki.document_vote", args=[self.document.slug])
+        response = self.client.post(
+            url,
+            data={
+                "helpful": "true",
+                "revision_id": unapproved.id,
+                "referrer": "",
+                "query": "",
+            },
+            HTTP_HX_REQUEST="true",
+        )
+
+        self.assertEqual(404, response.status_code)
+        self.assertFalse(HelpfulVote.objects.filter(revision=unapproved).exists())
+
+    def test_vote_works_when_url_locale_falls_back_to_parent(self):
+        """When a locale has no translation, the doc view renders the
+        English parent at the URL's locale prefix. The vote widget on
+        that page posts back to the URL's locale, so votes must resolve
+        to the parent document rather than 404.
+        """
+        rev = self.document.current_revision
+        url = reverse("wiki.document_vote", locale="xh", args=[self.document.slug])
+        response = self.client.post(
+            url,
+            data={
+                "helpful": "true",
+                "revision_id": rev.id,
+                "referrer": "",
+                "query": "",
+            },
+            HTTP_HX_REQUEST="true",
+        )
+
+        self.assertEqual(200, response.status_code)
+        self.assertTrue(HelpfulVote.objects.filter(revision=rev).exists())
 
     def test_helpfulvotes_graph_async(self):
         """Test the wiki.get_helpful_votes_async endpoint."""

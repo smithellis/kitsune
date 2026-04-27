@@ -1015,7 +1015,10 @@ def translate(request, document_slug, revision_id=None):
         rev_initial = {"based_on": based_on_rev.id, "comment": ""}
 
         if revision_id:
-            base_rev = Revision.objects.get(pk=revision_id)
+            allowed_docs = [parent_doc] if doc is None else [parent_doc, doc]
+            base_rev = get_visible_revision_or_404(
+                user, pk=revision_id, document__in=allowed_docs
+            )
             rev_initial.update(
                 content=base_rev.content, summary=base_rev.summary, keywords=base_rev.keywords
             )
@@ -1330,10 +1333,19 @@ def handle_vote(request, document_slug):
         return HttpResponse(survey_response)
 
     # Handle helpful/unhelpful voting
-    revision = get_object_or_404(Revision, id=smart_int(request.POST["revision_id"]))
-
-    if not revision.is_approved:
-        raise PermissionDenied
+    doc = get_visible_document_or_404(
+        request.user,
+        locale=request.LANGUAGE_CODE,
+        slug=document_slug,
+        look_for_translation_via_parent=True,
+        return_parent_if_no_translation=True,
+    )
+    revision = get_visible_revision_or_404(
+        request.user,
+        id=smart_int(request.POST["revision_id"]),
+        document=doc,
+        is_approved=True,
+    )
 
     if revision.document.category == TEMPLATES_CATEGORY:
         return HttpResponseBadRequest()

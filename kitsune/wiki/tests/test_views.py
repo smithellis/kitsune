@@ -2041,7 +2041,7 @@ class VoteTests(TestCase):
         d = TemplateDocumentFactory()
         r = ApprovedRevisionFactory(document=d)
         response = self.client.post(
-            reverse("wiki.document_vote", args=["hi"]), {"revision_id": r.id}
+            reverse("wiki.document_vote", args=[d.slug]), {"revision_id": r.id}
         )
         self.assertEqual(400, response.status_code)
 
