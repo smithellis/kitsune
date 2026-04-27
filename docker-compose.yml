@@ -112,6 +112,7 @@ services:
       - "9300:9300"
     volumes:
       - ./kitsune/search/dictionaries/synonyms:/usr/share/elasticsearch/config/synonyms
+      - esdata:/usr/share/elasticsearch/data
 
   kibana:
     image: docker.elastic.co/kibana/kibana:9.2.2
@@ -132,3 +133,4 @@ services:
 volumes:
   pgvolume:
   node_modules:
+  esdata:
