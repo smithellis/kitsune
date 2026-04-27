@@ -23,7 +23,7 @@ from kitsune.tags.models import SumoTag
 from kitsune.tags.tests import TagFactory
 from kitsune.tidings.models import Watch
 from kitsune.upload.models import ImageAttachment
-from kitsune.users.tests import UserFactory, add_permission
+from kitsune.users.tests import ContributorFactory, UserFactory, add_permission
 
 
 class AnswersTemplateTestCase(TestCase):
@@ -1204,6 +1204,30 @@ class QuestionsTemplateTestCase(TestCase):
         response = self.client.get(urlparams(reverse("questions.list", args=["all"]), show=""))
         self.assertEqual(200, response.status_code)
 
+    def test_default_show_depends_on_contributor_status(self):
+        QuestionFactory()
+        list_url = reverse("questions.list", args=["all"])
+
+        # Anonymous user → default "all".
+        response = self.client.get(list_url)
+        doc = pq(response.content)
+        self.assertEqual(1, len(doc('#owner-tabs a.selected[href*="show=all"]')))
+
+        # Authenticated non-contributor → default "all".
+        non_contributor = UserFactory()
+        self.client.login(username=non_contributor.username, password="testpass")
+        response = self.client.get(list_url)
+        doc = pq(response.content)
+        self.assertEqual(1, len(doc('#owner-tabs a.selected[href*="show=all"]')))
+        self.client.logout()
+
+        # Contributor → default "needs-attention".
+        contributor = ContributorFactory()
+        self.client.login(username=contributor.username, password="testpass")
+        response = self.client.get(list_url)
+        doc = pq(response.content)
+        self.assertEqual(1, len(doc('#owner-tabs a.selected[href*="show=needs-attention"]')))
+
 
 class QuestionsTemplateTestCaseNoFixtures(TestCase):
     def test_locked_questions_dont_appear(self):
@@ -1214,7 +1238,7 @@ class QuestionsTemplateTestCaseNoFixtures(TestCase):
         QuestionFactory(product=p, is_locked=True)
 
         url = reverse("questions.list", args=["all"])
-        url = urlparams(url, filter="no-replies")
+        url = urlparams(url, filter="recently-unanswered")
         response = self.client.get(url)
         doc = pq(response.content)
         self.assertEqual(2, len(doc(".question-entry")))
