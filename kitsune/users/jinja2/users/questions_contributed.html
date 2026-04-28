@@ -33,7 +33,7 @@
     </nav>
     {% endif %}
 
-    {% if is_moderator and (user_has_spam_questions or show) and not is_owner %}
+    {% if is_moderator and user_has_spam_questions and not is_owner %}
     <nav class="tabs">
       <ul class="tabs--list">
         <li class="tabs--item">
