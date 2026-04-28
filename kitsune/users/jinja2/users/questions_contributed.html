@@ -10,6 +10,7 @@
       {% if is_owner %}
         {{ _("My Questions") }}
       {% else %}
+        {# L10n: This is a title for user questions pages (like https://support.mozilla.org/user/kelimuttu/questions), displayed when a page is viewed by someone other than the profile owner. The page lists questions authored by the user. #}
         {{ _("Questions Asked") }}
       {% endif %}
     </h2>
@@ -21,10 +22,29 @@
           <a href="?" {% if not channel %}class="selected"{% endif %}><span>{{ _("All") }}</span></a>
         </li>
         <li class="tabs--item">
+          {# L10n: Displayed for users viewing their own questions. This is a label for a tab that lists community forum questions authored by the user. #}
           <a href="?channel=forum" {% if channel == "forum" %}class="selected"{% endif %}><span>{{ _("Forum") }}</span></a>
         </li>
         <li class="tabs--item">
+          {# L10n: A label/tab for questions that are Premium support tickets handled by paid support agents. #}
           <a href="?channel=direct_support" {% if channel == "direct_support" %}class="selected"{% endif %}><span>{{ _("Direct Support") }}</span></a>
+        </li>
+      </ul>
+    </nav>
+    {% endif %}
+
+    {% if is_moderator and (user_has_spam_questions or show) and not is_owner %}
+    <nav class="tabs">
+      <ul class="tabs--list">
+        <li class="tabs--item">
+          <a href="?" {% if not show %}class="selected"{% endif %}><span>{{ _("All") }}</span></a>
+        </li>
+        <li class="tabs--item">
+          {# L10n: Displayed for moderators only on user questions pages (like https://support.mozilla.org/user/kelimuttu/questions). This is a label for a tab that lists all non-spam forum questions authored by the user. #}
+          <a href="?show=valid" {% if show == "valid" %}class="selected"{% endif %}><span>{{ _("Valid") }}</span></a>
+        </li>
+        <li class="tabs--item">
+          <a href="?show=spam" {% if show == "spam" %}class="selected"{% endif %}><span>{{ _("Spam") }}</span></a>
         </li>
       </ul>
     </nav>

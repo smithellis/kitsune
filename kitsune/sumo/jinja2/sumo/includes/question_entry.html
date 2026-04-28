@@ -103,6 +103,7 @@
     {% if question.channel == "direct_support" %}
       <span class="my-questions--channel-badge my-questions--channel-badge--direct-support"
             title="{{ _('This question was submitted via Direct Support') }}">
+        {# L10n: A label/tab for questions that are Premium support tickets handled by paid support agents. #}
         {{ _("Direct Support") }}
       </span>
       {% if question.zd_status == question.ZD_STATUS_SOLVED %}
