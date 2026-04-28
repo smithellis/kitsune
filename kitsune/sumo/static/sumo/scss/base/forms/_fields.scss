@@ -182,6 +182,11 @@ label {
   }
 }
 
+#needsinfo,
+#clear-needsinfo {
+  max-width: none;
+}
+
 .character-counter {
   margin: p.$spacing-sm 0 0 0;
   @include c.text-body-sm;
