@@ -246,6 +246,8 @@ def questions_contributed(request, username):
         if topic_slug:
             forum_questions = forum_questions.filter(topic__slug=topic_slug)
         user_has_spam_questions = forum_questions.filter(is_spam=True).exists()
+        if not user_has_spam_questions:
+            show = None
         if is_moderator and show == "spam":
             forum_questions = forum_questions.filter(is_spam=True)
         elif not is_moderator or show == "valid":
