@@ -23,3 +23,9 @@
     <a href="#" class="btn" data-type="submit">{{ _('Unmark as spam') }}</a>
   </form>
 {% endmacro %}
+
+{# CSS selectors of every region whose server-rendered markup depends on the
+   current question-list filter state. Paste into hx-select-oob on any action
+   that pushes a new URL so sidebar nav, notification banners, and sort
+   dropdowns stay in sync with the URL after the swap. #}
+{% set filter_oob = "#tagged,#topic-notification,#owner-tabs,#questions-sidebar-nav,#sort-questions-mobile,#sort-questions-sidebar" %}

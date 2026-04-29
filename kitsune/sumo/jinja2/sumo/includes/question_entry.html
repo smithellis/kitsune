@@ -74,7 +74,7 @@
   {% endif %}
 {% endmacro %}
 
-{% macro question_entry(question, profile_username=None, request=None, user_is_contributor=False, preserve_params=None, use_htmx_filters=False) %}
+{% macro question_entry(question, profile_username=None, request=None, user_is_contributor=False, preserve_params=None, htmx_filters=None) %}
   {% set _base_url = url('users.questions', username=profile_username) if (question.channel == "direct_support" and profile_username) else None %}
   {% if _base_url %}
     {% set _product_url = (_base_url + '?channel=direct_support&product=' + question.product.slug) if question.product else None %}
@@ -178,11 +178,11 @@
       {% if question.topic and _topic_url %}
         <a class="question-entry--meta-item"
            href="{{ _topic_url }}"
-           {% if use_htmx_filters -%}
+           {% if htmx_filters -%}
            hx-get="{{ _topic_url }}"
            hx-target="#questions-list"
            hx-select="#questions-list"
-           hx-select-oob="#tagged,#topic-notification,#owner-tabs,#products-topics-dropdown"
+           hx-select-oob="{{ htmx_filters }}"
            hx-swap="outerHTML"
            hx-push-url="true"
            {%- endif %}

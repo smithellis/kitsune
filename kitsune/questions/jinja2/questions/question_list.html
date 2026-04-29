@@ -2,6 +2,7 @@
 {% from "dashboards/includes/macros.html" import topic_selector, sort_questions %}
 {% from 'includes/common_macros.html' import scam_banner %}
 {% from "sumo/includes/question_entry.html" import question_entry %}
+{% from "questions/includes/macros.html" import filter_oob %}
 
 {% set classes = 'questions' %}
 {% set scripts = ('questions',) %}
@@ -138,7 +139,7 @@
        hx-get="{{ _clear_topic_url }}"
        hx-target="#questions-list"
        hx-select="#questions-list"
-       hx-select-oob="#tagged,#topic-notification,#owner-tabs,#products-topics-dropdown"
+       hx-select-oob="{{ filter_oob }}"
        hx-swap="outerHTML"
        hx-push-url="true"
        title="{{ _('Clear topic filter') }}" aria-label="{{ _('Clear topic filter') }}">
@@ -166,7 +167,7 @@
        hx-get="{{ questions_url(tagged=None) }}"
        hx-target="#questions-list"
        hx-select="#questions-list"
-       hx-select-oob="#tagged,#owner-tabs"
+       hx-select-oob="{{ filter_oob }}"
        hx-swap="outerHTML"
        hx-push-url="true"
        title="{{ _('Clear all tag filters') }}" aria-label="{{ _('Clear all tag filters') }}">
@@ -214,7 +215,7 @@
   </nav>
 
   {% if show != "spam" %}
-  <select data-sort-questions class="forum--mobile-sort hide-on-large">
+  <select id="sort-questions-mobile" data-sort-questions class="forum--mobile-sort hide-on-large">
     {% for o, details in orders.items() %}
       <option
         value="{{ questions_url(order=o, sort=None if order != o else 'desc' if sort == 'asc' else 'asc', page=None) }}"
@@ -232,7 +233,7 @@
         <section class="forum--question-list questions">
           {% for question in questions.object_list %}
             <article id="question-{{ question.id }}" class="question-entry">
-              {{ question_entry(question, request=request, user_is_contributor=_user_is_contributor, preserve_params=request.GET, use_htmx_filters=True) }}
+              {{ question_entry(question, request=request, user_is_contributor=_user_is_contributor, preserve_params=request.GET, htmx_filters=filter_oob) }}
             </article>
           {% endfor %}
         </section>
@@ -250,7 +251,7 @@
 {% block side %}
 {% if show != "spam" %}
 <div class="forum--sidebar-sort large-only">
-  <select data-sort-questions>
+  <select id="sort-questions-sidebar" data-sort-questions>
     {% for o, details in orders.items() %}
       <option
         value="{{ questions_url(order=o, sort=None if order != o else 'desc' if sort == 'asc' else 'asc', page=None) }}"
@@ -264,7 +265,7 @@
 
 {% if request.user.is_authenticated %}
 <div class="questions-sidebar">
-  <nav class="sidebar-nav">
+  <nav id="questions-sidebar-nav" class="sidebar-nav">
     <span class="details-heading"></span>
     <ul class="sidebar-nav--list">
       {% if filters and _user_is_contributor %}
@@ -280,7 +281,7 @@
           <select id="products-topics-dropdown"
                   hx-target="#questions-list"
                   hx-select="#questions-list"
-                  hx-select-oob="#tagged,#topic-notification,#owner-tabs,#products-topics-dropdown"
+                  hx-select-oob="{{ filter_oob }}"
                   hx-swap="outerHTML"
                   hx-push-url="true">
             <option value="{% if topic_navigation %}{{ url('questions.list', product_slug='all') }}{% else %}{{ questions_url(topic=None) }}{% endif %}" {% if selected_topic_slug is none %}selected{% endif %}>
