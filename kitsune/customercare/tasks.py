@@ -4,7 +4,9 @@ from datetime import timedelta
 from celery import shared_task
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from kitsune.customercare.models import SupportTicket
 from kitsune.customercare.utils import process_zendesk_classification_result
@@ -18,6 +20,14 @@ log = logging.getLogger("k.task")
 shared_task_with_retry = shared_task(
     acks_late=True, autoretry_for=(Exception,), retry_backoff=2, retry_kwargs={"max_retries": 3}
 )
+
+SIMPLE_FIELD_EVENT_MAP = {
+    "zen:event-type:ticket.status_changed": "zd_status",
+    "zen:event-type:ticket.subject_changed": "subject",
+    "zen:event-type:ticket.description_changed": "description",
+}
+COMMENT_ADDED_EVENT = "zen:event-type:ticket.comment_added"
+HANDLED_EVENT_TYPES = {COMMENT_ADDED_EVENT, *SIMPLE_FIELD_EVENT_MAP}
 
 
 @shared_task_with_retry
@@ -82,7 +92,10 @@ def auto_reject_old_zendesk_spam() -> None:
     rejected_count = 0
 
     for flag in old_spam_flags:
-        if flag.content_object and flag.content_object.submission_status == SupportTicket.STATUS_FLAGGED:
+        if (
+            flag.content_object
+            and flag.content_object.submission_status == SupportTicket.STATUS_FLAGGED
+        ):
             flag.content_object.submission_status = SupportTicket.STATUS_REJECTED
             flag.content_object.save(update_fields=["submission_status"])
             rejected_count += 1
@@ -119,3 +132,60 @@ def process_failed_zendesk_tickets() -> None:
 
     if processed_count > 0:
         log.info(f"Processed {processed_count} failed Zendesk tickets")
+
+
+@shared_task
+@skip_if_read_only_mode
+def process_zendesk_update(payload: dict) -> None:
+    """
+    Process an incoming Zendesk ticket-event webhook payload. The Zendesk
+    Webhook must be created based on Zendesk events rather than triggers
+    or automation.
+
+    Handles these event types:
+      - ticket.comment_added
+      - ticket.status_changed
+      - ticket.subject_changed
+      - ticket.description_changed
+    """
+    if (event_type := payload.get("type")) not in HANDLED_EVENT_TYPES:
+        if event_type:
+            log.warning(f"Unhandled event type: {event_type}.")
+        return
+
+    if not (
+        (detail := payload.get("detail"))
+        and (ticket_id := detail.get("id"))
+        and (updated_at := detail.get("updated_at"))
+    ):
+        raise ValueError("Zendesk webhook payload missing detail.id or detail.updated_at.")
+
+    if not (event := payload.get("event")):
+        raise ValueError("Zendesk webhook payload missing event information.")
+
+    with transaction.atomic():
+        try:
+            ticket = SupportTicket.objects.select_for_update().get(
+                zendesk_ticket_id=str(ticket_id)
+            )
+        except SupportTicket.DoesNotExist:
+            return
+
+        update_fields = []
+
+        if field := SIMPLE_FIELD_EVENT_MAP.get(event_type):
+            setattr(ticket, field, event.get("current"))
+            update_fields.append(field)
+        elif event_type == COMMENT_ADDED_EVENT:
+            comment = event.get("comment")
+            if not isinstance(comment, dict):
+                raise ValueError("Unexpected comment structure from Zendesk")
+            comment["created_at"] = updated_at
+            comment["public"] = comment.pop("is_public", False)
+            ticket.comments.append(comment)
+            update_fields.append("comments")
+
+        if update_fields:
+            ticket.zd_updated_at = parse_datetime(updated_at)
+            update_fields.append("zd_updated_at")
+            ticket.save(update_fields=update_fields)
