@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from django.db import models
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _lazy
 
 from kitsune.products.models import Product, Topic
@@ -64,9 +65,7 @@ class SupportTicket(ModelBase):
         db_index=True,
     )
     zendesk_ticket_id = models.CharField(max_length=255, null=True, blank=True)
-    zd_status = models.CharField(
-        max_length=20, choices=ZD_STATUS_CHOICES, null=True, blank=True
-    )
+    zd_status = models.CharField(max_length=20, choices=ZD_STATUS_CHOICES, null=True, blank=True)
     zd_updated_at = models.DateTimeField(null=True, blank=True)
     last_synced_at = models.DateTimeField(null=True, blank=True)
     comments = models.JSONField(default=list, blank=True)
@@ -92,11 +91,17 @@ class SupportTicket(ModelBase):
         return "direct_support"
 
     def get_absolute_url(self):
-        return "#"  # no detail page yet
+        if not self.user:
+            return None
+        return reverse("customercare.ticket_detail", args=[self.user.username, self.id])
 
     @property
     def num_answers(self):
-        return len(self.comments)
+        return len(self.public_comments)
+
+    @property
+    def public_comments(self):
+        return [c for c in self.comments if c.get("public", False)]
 
     @property
     def user_status(self):

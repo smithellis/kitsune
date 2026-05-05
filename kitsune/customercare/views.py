@@ -3,21 +3,62 @@ import hashlib
 import hmac
 import json
 import logging
+from datetime import timedelta
 
+import requests
 from django.conf import settings
-from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import SuspiciousOperation
-from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404
+from django.http import Http404, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, render
+from django.utils import timezone
 from django.views import View
 from django.views.decorators.http import require_POST
+from zenpy.lib.exception import APIException
 
 from kitsune.customercare.models import SupportTicket
 from kitsune.customercare.tasks import process_zendesk_update
-from kitsune.customercare.utils import generate_classification_tags
+from kitsune.customercare.utils import generate_classification_tags, sync_ticket_from_zendesk
 from kitsune.products.models import Topic
 
 log = logging.getLogger("k.customercare")
+
+
+def _ticket_needs_sync(ticket):
+    if not ticket.zendesk_ticket_id:
+        return False
+    if ticket.last_synced_at is None:
+        return True
+    threshold = timedelta(seconds=settings.ZENDESK_COMMENTS_SYNC_THRESHOLD)
+    return ticket.last_synced_at < timezone.now() - threshold
+
+
+
+@login_required
+def ticket_detail(request, username, ticket_id):
+    ticket = get_object_or_404(
+        SupportTicket.objects.select_related("product", "topic", "user"),
+        id=ticket_id,
+        user__username=username,
+    )
+    if not (ticket.user_id == request.user.id or request.user.has_perm("customercare.change_supportticket")):
+        raise Http404
+
+    if request.headers.get("HX-Request"):
+        sync_error = False
+        if _ticket_needs_sync(ticket):
+            try:
+                sync_ticket_from_zendesk(ticket)
+            except (APIException, requests.exceptions.RequestException):
+                log.exception("Failed to sync ticket %s from Zendesk", ticket.zendesk_ticket_id)
+                sync_error = True
+        return render(request, "customercare/includes/ticket_replies.html",
+                      {"ticket": ticket, "sync_error": sync_error})
+
+    return render(request, "customercare/ticket_detail.html", {
+        "ticket": ticket,
+        "needs_sync": _ticket_needs_sync(ticket),
+    })
 
 
 @require_POST

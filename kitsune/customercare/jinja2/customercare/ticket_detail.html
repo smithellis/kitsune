@@ -1,0 +1,37 @@
+{% extends "sumo/thread_detail.html" %}
+{% from "sumo/includes/thread_post.html" import thread_meta_rows %}
+
+{% set title = ticket.subject %}
+{% set canonical_url = canonicalize(viewname="customercare.ticket_detail", username=ticket.user.username, ticket_id=ticket.id) %}
+
+{% block thread_title %}{{ ticket.subject }}{% endblock %}
+
+{# ── Notice: agent waiting for user reply ────────────────────────────────── #}
+{% block thread_notice %}
+  {% if ticket.zd_status == ticket.ZD_STATUS_PENDING %}
+    <div class="thread-detail--notice thread-detail--notice--info">
+      {{ _('Our support team has replied and is waiting for your response. Please check your email to reply.') }}
+    </div>
+  {% endif %}
+{% endblock %}
+
+{% block thread_meta %}{{ thread_meta_rows(ticket) }}{% endblock %}
+
+{% block thread_post_body %}
+  {{ ticket.description | e | replace('\n', '<br>') | safe }}
+{% endblock %}
+
+{% block thread_replies %}
+  {% if needs_sync %}
+    <div hx-get="{{ url('customercare.ticket_detail', username=ticket.user.username, ticket_id=ticket.id) }}"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+      <div class="thread-detail--loading">
+        <span class="loading-spinner" aria-hidden="true"></span>
+        {{ _('Fetching latest replies\u2026') }}
+      </div>
+    </div>
+  {% else %}
+    {% include "customercare/includes/ticket_replies.html" %}
+  {% endif %}
+{% endblock %}
