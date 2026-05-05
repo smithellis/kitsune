@@ -89,8 +89,7 @@ class Profile(ModelBase):
             "Some HTML supported: &#x3C;abbr title&#x3E; "
             + "&#x3C;blockquote&#x3E; &#x3C;code&#x3E; "
             + "&#x3C;em&#x3E; &#x3C;i&#x3E; &#x3C;li&#x3E; "
-            + "&#x3C;ol&#x3E; &#x3C;strong&#x3E; &#x3C;ul&#x3E;. "
-            + "Links are forbidden."
+            + "&#x3C;ol&#x3E; &#x3C;strong&#x3E; &#x3C;ul&#x3E;."
         ),
     )
     website = models.URLField(max_length=255, null=True, blank=True, verbose_name=_lazy("Website"))
