@@ -484,6 +484,7 @@ def question_tags(request):
     product_slug = request.GET.get("product_slug", "")
     topic_slug = request.GET.get("topic_slug", "")
     topic_navigation = request.GET.get("topic_navigation") == "1"
+    owner = request.GET.get("owner", "")
 
     product_ids = []
     if product_slug and product_slug != "all":
@@ -579,6 +580,12 @@ def question_tags(request):
             DSLQ("range", question_created={"lt": now - timedelta(days=90)})
             & DSLQ("term", question_has_answers=False)
         )
+        if owner == "mine" and request.user.is_authenticated:
+            user_id = str(request.user.id)
+            search = search.filter(
+                DSLQ("term", question_creator_id=user_id)
+                | DSLQ("term", question_answer_creator_ids=user_id)
+            )
         # Apply sub-filter if present, otherwise fall back to the show-level filter.
         if filter_ in FILTER_PRESETS:
             search = _apply_question_filters(search, **FILTER_PRESETS[filter_])
