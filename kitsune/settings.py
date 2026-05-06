@@ -8,6 +8,7 @@ import re
 
 import dj_database_url
 import django_cache_url
+from csp.constants import NONCE, NONE, SELF, UNSAFE_EVAL, UNSAFE_INLINE
 from decouple import Csv, config
 
 from kitsune.celery_beat import PERIODIC_TASKS_ALL, PERIODIC_TASKS_PRODUCTION_ONLY
@@ -489,6 +490,11 @@ MIDDLEWARE: tuple[str, ...] = (
     "kitsune.sumo.middleware.FilterByUserAgentMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    # CSPMiddleware must be above any middleware that renders templates
+    # using `request.csp_nonce` (e.g. Forbidden403Middleware), so that on
+    # the response phase (which runs in reverse) it is the last to write
+    # the CSP header. Otherwise `request.csp_nonce` raises CSPNonceError.
+    "csp.middleware.CSPMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "kitsune.sumo.middleware.SetRemoteAddr",
     "kitsune.sumo.middleware.EnforceHostIPMiddleware",
@@ -526,7 +532,6 @@ MIDDLEWARE: tuple[str, ...] = (
     "kitsune.sumo.middleware.InAAQMiddleware",
     "kitsune.users.middleware.LogoutDeactivatedUsersMiddleware",
     "kitsune.users.middleware.LogoutInvalidatedSessionsMiddleware",
-    "csp.middleware.CSPMiddleware",
     "dockerflow.django.middleware.DockerflowMiddleware",
 )
 
@@ -662,6 +667,7 @@ INSTALLED_APPS: tuple[str, ...] = (
     "graphene_django",
     "mozilla_django_oidc",
     "corsheaders",
+    "csp",
     "kitsune.users",
     "guardian",
     "waffle",
@@ -1246,81 +1252,73 @@ ZENDESK_COMMENTS_SYNC_THRESHOLD = config("ZENDESK_COMMENTS_SYNC_THRESHOLD", defa
 LOGIN_EXCEPTIONS = frozenset(["mozilla-account"])
 
 # Django CSP configuration
-CSP_INCLUDE_NONCE_IN = ["script-src", "style-src"]
-
-CSP_DEFAULT_SRC = ("'none'",)
-
-CSP_SCRIPT_SRC: tuple[str, ...] = (
-    "'self'",
-    "https://*.mozilla.org",
-    "https://*.webservices.mozgcp.net",
-    "https://*.google-analytics.com",
-    "https://*.googletagmanager.com",
-    "https://pontoon.mozilla.org",
-    "https://*.jsdelivr.net",
-)
-
-CSP_IMG_SRC = (
-    "'self'",
-    "blob:",
-    "data:",
-    "https://*.mozaws.net",
-    "https://*.webservices.mozgcp.net",
-    "https://*.google-analytics.com",
-    "https://profile.accounts.firefox.com",
-    "https://firefoxusercontent.com",
-    "https://secure.gravatar.com",
-    "https://i1.wp.com",
-    "https://mozillausercontent.com",
-)
-
-CSP_MEDIA_SRC = (
-    "'self'",
-    "https://*.webservices.mozgcp.net",
-)
-
-CSP_FRAME_SRC = (
-    "'self'",
-    "https://*.youtube.com",
-)
-
-CSP_FONT_SRC = (
-    "'self'",
-    "https://*.webservices.mozgcp.net",
-)
-
-CSP_STYLE_SRC: tuple[str, ...] = (
-    "'self'",
-    "https://*.webservices.mozgcp.net",
-    "https://*.jsdelivr.net",
-)
-
-CSP_FORM_ACTION = (
-    "'self'",
-    "https://accounts.firefox.com",
-    "https://accounts.stage.mozaws.net",
-)
-
-CSP_MANIFEST_SRC = (
-    "https://support.allizom.org",
-    "https://support.mozilla.org",
-)
-
-CSP_CONNECT_SRC = (
-    "'self'",
-    "https://*.google-analytics.com",
-    "https://location.services.mozilla.com",
-    "https://accounts.firefox.com/metrics-flow",
-    "https://accounts.stage.mozaws.net/metrics-flow",
-    "https://basket.mozilla.org",
-)
+CONTENT_SECURITY_POLICY = {
+    "DIRECTIVES": {
+        "default-src": [NONE],
+        "script-src": [
+            SELF,
+            "https://*.mozilla.org",
+            "https://*.webservices.mozgcp.net",
+            "https://*.google-analytics.com",
+            "https://*.googletagmanager.com",
+            "https://pontoon.mozilla.org",
+            "https://*.jsdelivr.net",
+            NONCE,
+        ],
+        "img-src": [
+            SELF,
+            "blob:",
+            "data:",
+            "https://*.mozaws.net",
+            "https://*.webservices.mozgcp.net",
+            "https://*.google-analytics.com",
+            "https://profile.accounts.firefox.com",
+            "https://firefoxusercontent.com",
+            "https://secure.gravatar.com",
+            "https://i1.wp.com",
+            "https://mozillausercontent.com",
+        ],
+        "media-src": [
+            SELF,
+            "https://*.webservices.mozgcp.net",
+        ],
+        "frame-src": [
+            SELF,
+            "https://*.youtube.com",
+        ],
+        "font-src": [
+            SELF,
+            "https://*.webservices.mozgcp.net",
+        ],
+        "style-src": [
+            SELF,
+            "https://*.webservices.mozgcp.net",
+            "https://*.jsdelivr.net",
+            NONCE,
+        ],
+        "form-action": [
+            SELF,
+            "https://accounts.firefox.com",
+            "https://accounts.stage.mozaws.net",
+        ],
+        "manifest-src": [
+            "https://support.allizom.org",
+            "https://support.mozilla.org",
+        ],
+        "connect-src": [
+            SELF,
+            "https://*.google-analytics.com",
+            "https://location.services.mozilla.com",
+            "https://accounts.firefox.com/metrics-flow",
+            "https://accounts.stage.mozaws.net/metrics-flow",
+            "https://basket.mozilla.org",
+        ],
+    },
+}
 
 if DEBUG:
-    CSP_STYLE_SRC += ("'unsafe-inline'",)
-    CSP_SCRIPT_SRC += (
-        "'unsafe-inline'",
-        "'unsafe-eval'",
-    )
+    CONTENT_SECURITY_POLICY["DIRECTIVES"]["style-src"].append(UNSAFE_INLINE)
+    CONTENT_SECURITY_POLICY["DIRECTIVES"]["script-src"].extend([UNSAFE_INLINE, UNSAFE_EVAL])
 
 # Trusted Contributor Groups
 TRUSTED_GROUPS = [
