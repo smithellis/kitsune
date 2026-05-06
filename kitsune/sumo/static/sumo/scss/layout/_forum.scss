@@ -696,6 +696,7 @@
 // Answer footer: full-width bar separating the post body from reactions + actions
 .answer-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: p.$spacing-md;
@@ -771,6 +772,8 @@
 }
 
 .answer-tools--solve-btn {
+  white-space: nowrap;
+
   svg {
     width: 14px;
     height: 14px;
