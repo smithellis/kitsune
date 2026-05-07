@@ -715,11 +715,12 @@
 .answer-vote {
   display: flex;
   align-items: center;
-  gap: p.$spacing-xs;
+  gap: p.$spacing-sm;
 }
 
 .answer-vote--label {
   @include c.text-body-sm;
+  font-weight: 700;
   color: var(--color-text-light);
   margin-inline-end: p.$spacing-xs;
 }
@@ -727,19 +728,19 @@
 .answer-vote--btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px p.$spacing-sm;
+  gap: p.$spacing-xs;
+  padding: 0 p.$spacing-sm;
+  line-height: 1;
   border: 1px solid var(--color-light-gray-04);
   border-radius: 2em;
   background: transparent;
   cursor: pointer;
-  @include c.text-body-sm;
   color: var(--color-text-light);
   transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
 
   svg {
-    width: 14px;
-    height: 14px;
+    width: 20px;
+    height: 20px;
     flex-shrink: 0;
   }
 
@@ -753,6 +754,10 @@
     opacity: 0.65;
     cursor: default;
   }
+}
+
+.answer-vote--btn:not(.answer-vote--btn--down) svg {
+  transform: rotate(180deg);
 }
 
 .answer-vote--count {
@@ -841,8 +846,9 @@
     width: 14px;
     height: 14px;
     flex-shrink: 0;
-    color: var(--color-success);
-    stroke: var(--color-success);
+    color: var(--color-green-08);
+    stroke: var(--color-green-08);
+    transform: rotate(180deg);
   }
 
   strong {
